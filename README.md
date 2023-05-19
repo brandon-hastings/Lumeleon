@@ -1,6 +1,8 @@
-# Gecko.Repo
+# Lumeleon
+
+Step 1: Use syntax "python patternAnalysis.py", to launch the user interface, where you can import folders of images to be analyzed in sequence.
 ## Intensity Matching:
-Step 1: Use syntax "python match.py folder_name", in which folder_name is the name of on of the subfolder containing pictures from the same specimen. The reference image (alphabetically) will be displayed.
+Step 1: Use "Standardize Images", to scale the images to a color standard present in all images. The reference image will be displayed first.
 
 Step 2: Define a reference rectangle on the image by clicking and holding the left mouse button. 
 
@@ -18,7 +20,7 @@ Result: A new subfolder called "modified" will be created containing all the mod
 
 ![download](https://user-images.githubusercontent.com/69599932/179578176-55e46c1f-82c8-49fb-9576-e03a3eef46bc.png)
 
-Step 1: Use syntax "python segment.py image_file N_clusters" to run the script. It shows you the resulting masks along with the segmented images. At this point you have to close the window and enter the number of the mask that includes the correct part of the image. In this example with 4 clusters, I select number 0 after closing the figure window. It saves the segmented image with a "_4" at the end of the name so you will be able to reproduce your work later.
+Step 1: Use "Segment Images" to begin color spot segmentation via k-means clustering. It shows you the resulting masks along with the original images for visual confirmation. At this point select the number of the mask that includes the correct part of the image. In this example with 4 clusters, I select number 0. It saves the segmented image with a "_4" at the end of the name so you will be able to reproduce your work later.
 
 ![download](https://user-images.githubusercontent.com/69599932/179578200-f5216b67-b2f6-47d0-9bc0-fa2e7c6f0904.png)
 
@@ -29,3 +31,6 @@ Step 2: You can repeat step 1 as many times as you want to go down the hierarchi
 ![thumbnail_image](https://user-images.githubusercontent.com/69599932/179578656-4dbcf7d2-8ccb-4ee3-981a-17909e4d489b.png)
 
 ![test_4_3](https://user-images.githubusercontent.com/69599932/179578628-010205bf-24a5-40c3-b144-30a430923a06.png)
+
+## Extraction
+After Segmenting, you can extract the luminance values for all images in the selected folder into a csv file.
