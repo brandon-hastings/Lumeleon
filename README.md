@@ -1,4 +1,4 @@
-# Lumeleon
+# Lumeleon v0.1.0
 
 Step 1: Use syntax "python patternAnalysis.py", to launch the user interface, where you can import folders of images to be analyzed in sequence.
 ## Intensity Matching:
