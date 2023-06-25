@@ -2,6 +2,10 @@
 
 Step 1: Use syntax "python patternAnalysis.py", to launch the user interface, where you can import folders of images to be analyzed in sequence.
 ## Intensity Matching:
+This process is intinded to standardize the lighting conditions of images taken in sequence to a color standard that is present within all images. This was created 
+with a time series color analysis in mind so that color change can be compared across images. Note that this method does not serve to detect the specific value of color, 
+only the relative change in color between the images.
+
 Step 1: Use "Standardize Images", to scale the images to a color standard present in all images. The reference image will be displayed first.
 
 Step 2: Define a reference rectangle on the image by clicking and holding the left mouse button. 
@@ -17,6 +21,9 @@ Result: A new subfolder called "modified" will be created containing all the mod
 
 
 ## Segmentation
+This process can potentially serve two purposes within your analysis. First, it can act to seperate the subject from the background of the image (this works best if the background is 
+a uniform color and relatively free of excessive clutter). However, a separate manually cropping step is sufficient for this purpose. Second, the main purpose was to segment color 
+patches into different groups and analyze color change within them.
 
 ![download](https://user-images.githubusercontent.com/69599932/179578176-55e46c1f-82c8-49fb-9576-e03a3eef46bc.png)
 
