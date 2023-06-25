@@ -13,7 +13,7 @@ import numpy as np
 import utils
 
 
-def main(folder, N_cluster, uv=False):
+def main(folder, N_cluster, toplevel, uv=False):
     folder = utils.correctPath(folder)
     if os.path.exists(Path(folder) / ".DS_Store"):
         os.remove(Path(folder) / ".DS_Store")
@@ -21,19 +21,21 @@ def main(folder, N_cluster, uv=False):
     # for every file in folder run a function that returns the modified image after input to a different function to
     # save
     def choose_clusters(image):
-        root = tk.Tk()
-        root.title(str(file))
+        subroot = tk.Toplevel(toplevel)
+        subroot.title(str(file)+" ORIGINAL")
 
         image = image[:, :, :3]
         pixel_vals = image.reshape((-1, 3))
 
         fig = Figure(figsize=(8, 8), dpi=100)
         axs = fig.subplots(N_cluster - 1, 2)
+        wcss = []
         for i in range(2, N_cluster+1):
             pixel_vals = np.float32(pixel_vals)
 
             criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-            retval, labels, centers = cv2.kmeans(pixel_vals, i, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+            compactness, labels, centers = cv2.kmeans(pixel_vals, i, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+            wcss.append(compactness)
             # convert data into 8-bit values
             centers = np.uint8(centers)
             segmented_data = centers[labels.flatten()]
@@ -47,26 +49,26 @@ def main(folder, N_cluster, uv=False):
             axs[i, 1].axis('off')
             axs[i, 1].text(50, 200, str(i+2), c='r', fontsize=10)
 
-        canvas = FigureCanvasTkAgg(fig, master=root)  # A tk.DrawingArea.
+        canvas = FigureCanvasTkAgg(fig, master=subroot)
         canvas.draw()
 
-        # pack_toolbar=False will make it easier to use a layout manager later on.
-        toolbar = NavigationToolbar2Tk(canvas, root, pack_toolbar=False)
+
+        toolbar = NavigationToolbar2Tk(canvas, subroot, pack_toolbar=False)
         toolbar.update()
 
         canvas.mpl_connect(
             "key_press_event", lambda event: print(f"you pressed {event.key}"))
         canvas.mpl_connect("key_press_event", key_press_handler)
 
-        button_quit = tk.Button(master=root, text="Quit", command=root.destroy)
+        button_quit = tk.Button(master=subroot, text="Quit", command=subroot.destroy)
 
         def handle_closing():
-            root.destroy()
+            subroot.destroy()
             sys.exit()
 
         def choose_segments(n_cluster):
-            seg_root = tk.Tk()
-            seg_root.title(str(file))
+            seg_root = tk.Toplevel(subroot)
+            seg_root.title(str(file)+" CLUSTERED")
             # image = io.imread(Path(folder) / file).astype(np.uint32)
             n_cluster = int(n_cluster) + 2
             # image = image[:, :, :3]
@@ -111,7 +113,7 @@ def main(folder, N_cluster, uv=False):
             def save_mask(selection):
                 i = int(selection)
                 b = np.reshape((p == i) * 1, (m, n))
-                savefile = file[:-4] + '_' + str(N_cluster) + '.png'
+                savefile = file[:-4] + '_' + str(selection) + '.png'
                 io.imsave(Path(folder) / savefile, (image * np.repeat(b[:, :, np.newaxis], 3, axis=2)).astype(np.uint8))
                 # canvas.draw()
                 seg_root.quit()
@@ -133,22 +135,22 @@ def main(folder, N_cluster, uv=False):
             # root.destroy()
             tk.mainloop()
             seg_root.destroy()
-            root.quit()
+            subroot.quit()
 
         options = list(range(2, N_cluster+1))
         # convert to strings
         options = [str(x) for x in options]
         #
-        variable = tk.StringVar(root)
+        variable = tk.StringVar(subroot)
         variable.set(options[0])
-        selector = tk.OptionMenu(root, variable, *options, command=choose_segments)
+        selector = tk.OptionMenu(subroot, variable, *options, command=choose_segments)
         button_quit.pack(side=tk.BOTTOM)
         selector.pack(side=tk.BOTTOM)
         toolbar.pack(side=tk.BOTTOM, fill=tk.X)
         canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
         tk.mainloop()
-        root.destroy()
+        subroot.destroy()
         # return selector
 
     for file in fnmatch.filter(sorted(os.listdir(folder)), '*e?.png'):
