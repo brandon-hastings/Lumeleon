@@ -1,4 +1,4 @@
-# Lumeleon v0.1.0
+# Lumeleon v0.1.1
 
 A Python package designed for time series analysis of color change presented in our pre-print paper "On the role of melanistic coloration on thermoregulation in the crepuscular gecko *Eublepharis macularius*" available [here](https://www.biorxiv.org/content/10.1101/2023.05.18.541382v1) on bioRxiv.
 
