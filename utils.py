@@ -1,7 +1,10 @@
 import os.path
-
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
+from matplotlib.backend_bases import key_press_handler
 import cv2
+import tkinter as tk
 
+'''functions used for area selection in image intesity matching'''
 def click_and_crop(event, x, y, flags, param):
     global img,refPt, cropping
     if len(refPt) == 2:
@@ -50,5 +53,43 @@ def SavePoints(I):
 
 
 '''remove trailing slash in case of user input, not a problem with file selection'''
+
+
 def correctPath(path):
     return os.path.normpath(path)
+
+
+'''create figure canvas to be used with tkinter window'''
+
+
+def pop_up(fig, subroot):
+    canvas = FigureCanvasTkAgg(fig, master=subroot)
+    canvas.draw()
+
+
+    toolbar = NavigationToolbar2Tk(canvas, subroot, pack_toolbar=False)
+    toolbar.update()
+
+    canvas.mpl_connect(
+        "key_press_event", lambda event: print(f"you pressed {event.key}"))
+    canvas.mpl_connect("key_press_event", key_press_handler)
+
+    button_quit = tk.Button(master=subroot, text="Quit", command=subroot.destroy)
+    return [button_quit, toolbar, canvas]
+
+
+'''toolbar functions for selecting image'''
+
+
+def image_selection(subroot, n_cluster, command, canvas, start=0, end=0):
+    options = list(range(start, n_cluster+end))
+    # convert to strings
+    options = [str(x) for x in options]
+    #
+    variable = tk.StringVar(subroot)
+    variable.set(options[0])
+    selector = tk.OptionMenu(subroot, variable, *options, command=command)
+    canvas[0].pack(side=tk.BOTTOM)
+    selector.pack(side=tk.BOTTOM)
+    canvas[1].pack(side=tk.BOTTOM, fill=tk.X)
+    canvas[2].get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
