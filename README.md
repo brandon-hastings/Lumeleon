@@ -1,7 +1,6 @@
 # Lumeleon v0.1.0
 
 A Python package designed for time series analysis of color change presented in our pre-print paper "On the role of melanistic coloration on thermoregulation in the crepuscular gecko Eublepharis macularius" available [here](https://www.biorxiv.org/content/10.1101/2023.05.18.541382v1) on bioRxiv.
-Text link: https://www.biorxiv.org/content/10.1101/2023.05.18.541382v1
 
 Step 1: Use syntax "python patternAnalysis.py", to launch the user interface, where you can import folders of images to be analyzed in sequence.
 ## Intensity Matching:
