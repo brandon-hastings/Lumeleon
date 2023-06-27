@@ -27,15 +27,15 @@ def main(folder, body_part=""):
             masked_mask = np.array(masked[:, :, 0], copy=True, dtype=bool).astype(float)
             masked_mask[original_mask == 0] = np.nan
 
-            def lum_convert(arr):
-                red = 0.2126
-                green = 0.7152
-                blue = 0.0722
-                red_ch = np.multiply(arr[:, :, 0], red)
-                green_ch = np.multiply(arr[:, :, 1], green)
-                blue_ch = np.multiply(arr[:, :, 2], blue)
-                lum_arr = np.add(red_ch, green_ch, blue_ch)
-                return lum_arr
+            # def lum_convert(arr):
+            #     red = 0.2126
+            #     green = 0.7152
+            #     blue = 0.0722
+            #     red_ch = np.multiply(arr[:, :, 0], red)
+            #     green_ch = np.multiply(arr[:, :, 1], green)
+            #     blue_ch = np.multiply(arr[:, :, 2], blue)
+            #     lum_arr = np.add(red_ch, green_ch, blue_ch)
+            #     return lum_arr
 
 
             img_yuv = cv2.cvtColor(original[:,:,[2,1,0]], cv2.COLOR_BGR2YUV)
@@ -43,10 +43,6 @@ def main(folder, body_part=""):
             # calc_luma = lum_convert(original)
             light = luma[np.where(masked_mask == 1)]
             dark = luma[np.where(masked_mask == 0)]
-            # print(light)
-            # print(luma[masked_mask == 1])
-            # print(dark)
-            # print(luma[masked_mask == 0])
 
             light_luma = np.mean(light) / np.max(luma)
             dark_luma = np.mean(dark) / np.max(luma)
