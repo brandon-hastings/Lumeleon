@@ -1,7 +1,6 @@
 import tkinter as tk
-import match_gui as match
+import match
 import segment
-import utils
 import uv_extract
 import extract
 from tkinter import filedialog
