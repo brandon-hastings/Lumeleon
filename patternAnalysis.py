@@ -1,12 +1,14 @@
 import tkinter as tk
 import match_gui as match
-import segment_gui
+import segment
+import utils
 import uv_extract
 import extract
 from tkinter import filedialog
 from tkinter import simpledialog
 window = tk.Tk()
 window.title("Lumeleon")
+print(type(window))
 
 
 standardframe = tk.Frame(window)
@@ -60,9 +62,9 @@ class FileBrowseAction(tk.Frame):
                                             parent=window,
                                             minvalue=0, maxvalue=10)
         if self.uv_value.get() == 1:
-            segment_gui.main(folder=folder_path, N_cluster=N_cluster, uv=True, toplevel=window)
+            segment.segment_gui(folder=folder_path, N_cluster=N_cluster, uv=True, toplevel=window)
         else:
-            segment_gui.main(folder=folder_path, N_cluster=N_cluster, uv=False, toplevel=window)
+            segment.segment_gui(folder=folder_path, N_cluster=N_cluster, uv=False, toplevel=window)
         self.entry.delete(0, tk.END)
 
     def extract_values(self):
@@ -92,5 +94,12 @@ FileBrowseAction(master=standardframe, step_num=1, step_name="Standardize images
 # FileBrowseAction(master=cropframe, step_num=2, step_name="Crop images")
 FileBrowseAction(master=maskframe, step_num=2, step_name="Mask images")
 FileBrowseAction(master=extractframe, step_num=3, step_name="Extract luminance")
+
+
+def on_closing():
+    window.destroy()
+
+
+window.protocol("WM_DELETE_WINDOW", on_closing)
 
 window.mainloop()
