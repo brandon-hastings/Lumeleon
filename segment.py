@@ -16,19 +16,25 @@ import tkinter as tk
 
 
 def sk_segment(file=None, N_cluster=None):
+
+    # trigger id used to determine later action based on GUI or command line call. Default to False (cmd line call)
     trigger = False
+    # determine if function was called via GUI or command line
+    # if called via GUI, file = the selected folder of images and N_cluster = clusters input in pop up window
     if None not in (file, N_cluster):
         file = file
         N_cluster = N_cluster
         trigger = True
     else:
+        # error handling for command line call, should only be two arguments given
         if len(sys.argv) != 3:
             print("usage:python match.py image N_clusters")
             return
     
         file = sys.argv[1]
         N_cluster = int(sys.argv[2])
-    
+
+    # read in image
     I = io.imread(file).astype(np.uint8)
     
     I = I[:,:,:3]
@@ -39,12 +45,15 @@ def sk_segment(file=None, N_cluster=None):
     m = I.shape[0]
     n = I.shape[1]
     
-    
+    # reshape image and apply kMeans
     x = np.reshape(I, (m*n, 3))
-    model = MiniBatchKMeans(n_clusters= N_cluster, init='k-means++', max_iter=100, batch_size=2048, verbose=0, compute_labels=True, random_state=None, tol=0.0, max_no_improvement=10, init_size=None, n_init=5, reassignment_ratio=0.01).fit(x)
+    model = MiniBatchKMeans(n_clusters= N_cluster, init='k-means++', max_iter=100, batch_size=2048, verbose=0,
+                            compute_labels=True, random_state=None, tol=0.0, max_no_improvement=10, init_size=None,
+                            n_init=5, reassignment_ratio=0.01).fit(x)
     
     p = model.predict(x)
-    
+
+    # plot images side by side, original on left, masked image on right. One set for each cluster
     levels = np.unique(p)
     fig = plt.figure(figsize=(8,8), dpi=100)
     axs = fig.subplots(len(levels),2)
@@ -58,14 +67,17 @@ def sk_segment(file=None, N_cluster=None):
         axs[i,1].axis('off')
         axs[i,1].text(50, 200, str(i), c='r', fontsize=10)
 
+    # if function call is from command line, show figure and give command line interface options
     if trigger is False:
         fig.show()
-        
+
+        # command line interaction
         key = ' '
         keys = [str(i) for i in range(N_cluster)] + ['q']
         while key not in keys:
             key = input('Which mask to save? or [q] to quit.  ')
-            
+
+        # quit out of command line interface
         if key == 'q':
             return
         i = int(key)
