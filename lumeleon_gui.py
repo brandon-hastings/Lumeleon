@@ -61,9 +61,9 @@ class FileBrowseAction(tk.Frame):
                                             parent=window,
                                             minvalue=0, maxvalue=10)
         if self.uv_value.get() == 1:
-            segment.segment_gui(folder=folder_path, N_cluster=N_cluster, uv=True, toplevel=window)
+            segment.Segmentation(folder=folder_path, n_cluster=N_cluster, toplevel=window).manual_pattern_segmentation()
         else:
-            segment.segment_gui(folder=folder_path, N_cluster=N_cluster, uv=False, toplevel=window)
+            segment.Segmentation(folder=folder_path, n_cluster=N_cluster, toplevel=window).background_segmentation()
         self.entry.delete(0, tk.END)
 
     def extract_values(self):

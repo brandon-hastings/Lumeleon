@@ -3,6 +3,11 @@ from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationTool
 from matplotlib.backend_bases import key_press_handler
 import cv2
 import tkinter as tk
+import shutil
+import ruamel.yaml.representer
+import yaml
+from ruamel.yaml import YAML
+from pathlib import Path
 
 '''functions used for area selection in image intesity matching'''
 def click_and_crop(event, x, y, flags, param):
@@ -52,6 +57,46 @@ def SavePoints(I):
     return refPt
 
 
+'''make subdirectories'''
+
+
+def make_folder(project_folder, folder_name):
+    new_folder = folder_name
+    if new_folder in os.listdir(project_folder):
+        shutil.rmtree(new_folder)
+    new_dir = os.path.join(project_folder, new_folder)
+    os.makedirs(new_dir)
+    return new_dir
+
+
+'''find image directories that still need processed in selected step'''
+
+
+def search_existing_directories(config, image_directories, new_folder_name, search_folder_name):
+    working_folder = Path(config["project_path"]) / search_folder_name
+    save_folder = Path(config["project_path"]) / new_folder_name
+    folders_to_process = []
+    if os.path.exists(save_folder):
+        # folders_to_process = []
+        processed_folders = [os.path.basename(i) for i in os.listdir(save_folder) if os.path.isdir(i)]
+        for i in image_directories:
+            if os.path.basename(i) not in processed_folders:
+                folders_to_process.append(working_folder / os.path.basename(i))
+    else:
+        os.makedirs(save_folder)
+        for i in image_directories:
+            folders_to_process.append(working_folder / os.path.basename(i))
+        # folders_to_process = image_directories
+    return folders_to_process, save_folder
+
+
+'''find subdirectories in given folder'''
+
+
+def find_directories(folder):
+    return [i for i in os.scandir(folder) if os.path.isdir(i)]
+
+
 '''remove trailing slash in case of user input, not a problem with file selection'''
 
 
@@ -93,3 +138,70 @@ def image_selection(subroot, n_cluster, command, canvas, start=0, end=0):
     selector.pack(side=tk.BOTTOM)
     canvas[1].pack(side=tk.BOTTOM, fill=tk.X)
     canvas[2].get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+
+'''functions for creating and saving yaml config files (Mostly taken from DeepLabCut)'''
+
+
+def create_config():
+    yaml_str = """\
+    # Project definitions (do not edit)
+        Task:
+        scorer:
+        date:
+        \n
+    # Project path (change when moving around)
+        project_path:
+        image_folders:
+        \n
+    # Image type of raw images
+        image_type:
+        """
+
+    ruamelFile = YAML()
+    cfg_file = ruamelFile.load(yaml_str)
+    return cfg_file, ruamelFile
+
+
+def read_config(configname):
+    """
+    Reads structured config file defining a project.
+    """
+    ruamelFile = YAML()
+    path = Path(configname)
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                cfg = ruamelFile.load(f)
+                curr_dir = os.path.dirname(configname)
+                if cfg["project_path"] != curr_dir:
+                    cfg["project_path"] = curr_dir
+                    write_config(configname, cfg)
+        except Exception as err:
+            if len(err.args) > 2:
+                if (
+                        err.args[2]
+                        == "could not determine a constructor for the tag '!!python/tuple'"
+                ):
+                    with open(path, "r") as ymlfile:
+                        cfg = yaml.load(ymlfile, Loader=yaml.SafeLoader)
+                        write_config(configname, cfg)
+                else:
+                    raise
+
+    else:
+        raise FileNotFoundError(
+            "Config file is not found. Please make sure that the file exists and/or that you passed the path of the config file correctly!"
+        )
+    return cfg
+
+
+def write_config(configname, cfg):
+    """
+    Write structured config file.
+    """
+    with open(configname, "w+") as cf:
+        cfg_file, ruamelFile = create_config()
+        for key in cfg.keys():
+            cfg_file[key] = cfg[key]
+        ruamelFile.dump(cfg_file, cf)

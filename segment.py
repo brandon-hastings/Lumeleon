@@ -2,186 +2,206 @@ import os
 from skimage import io
 from sklearn.cluster import MiniBatchKMeans
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
+from tkinter import simpledialog
 from pathlib import Path
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
+from matplotlib.backend_bases import key_press_handler
 import numpy as np
 import fnmatch
-import sys
 import cv2
-import utils
 import tkinter as tk
+import shutil
 
+import utils
 
 '''MAIN SEGMENTATION METHOD VIA KMEANS SKIMAGE, CALLABLE FROM COMMAND LINE OR GUI'''
 
 
-def sk_segment(file=None, N_cluster=None):
+class Segmentation:
+    def __init__(self, config, folder=None, n_cluster=None, toplevel=None):
+        self.folder = folder if folder is not None else TypeError
+        self.toplevel = toplevel if toplevel is not None else TypeError
+        if n_cluster is None:
+            self.n_cluster = simpledialog.askinteger("Input", "Number of clusters to use:",
+                                                     parent=self.toplevel, minvalue=0, maxvalue=10)
+        elif type(n_cluster) is int:
+            self.n_cluster = n_cluster
+        else:
+            print("n_cluster setting error")
+        self.child_root = tk.Toplevel(toplevel)
 
-    # trigger id used to determine later action based on GUI or command line call. Default to False (cmd line call)
-    trigger = False
-    # determine if function was called via GUI or command line
-    # if called via GUI, file = the selected folder of images and N_cluster = clusters input in pop up window
-    if None not in (file, N_cluster):
-        file = file
-        N_cluster = N_cluster
-        trigger = True
-    else:
-        # error handling for command line call, should only be two arguments given
-        if len(sys.argv) != 3:
-            print("usage:python match.py image N_clusters")
-            return
-    
-        file = sys.argv[1]
-        N_cluster = int(sys.argv[2])
+        self.config = utils.read_config(config)
+        # self.image_directories = self.config["image_folders"]
 
-    # read in image
-    I = io.imread(file).astype(np.uint8)
-    
-    I = I[:,:,:3]
-    
-#    I = I - np.min(I)
-#    I = I / np.max(I)
-    
-    m = I.shape[0]
-    n = I.shape[1]
-    
-    # reshape image and apply kMeans
-    x = np.reshape(I, (m*n, 3))
-    model = MiniBatchKMeans(n_clusters= N_cluster, init='k-means++', max_iter=100, batch_size=2048, verbose=0,
-                            compute_labels=True, random_state=None, tol=0.0, max_no_improvement=10, init_size=None,
-                            n_init=5, reassignment_ratio=0.01).fit(x)
-    
-    p = model.predict(x)
+        self.file_list = None
+        self.file = None
+        if os.path.isdir(folder):
+            self.directory = Path(folder)
+            self.file_list = [Path(folder) / i for i in fnmatch.filter(sorted(os.listdir(folder)), '*e?.png')]
+        elif os.path.isfile(folder):
+            self.directory = os.path.dirname(folder)
+            self.file = [folder]
 
-    # plot images side by side, original on left, masked image on right. One set for each cluster
-    levels = np.unique(p)
-    fig = plt.figure(figsize=(8,8), dpi=100)
-    axs = fig.subplots(len(levels),2)
-    for i in levels:
-        b = np.reshape((p==i)*1,(m,n))
-        
-        axs[i,0].imshow(b)
-        axs[i,0].axis('off')
-        
-        axs[i,1].imshow(I * np.repeat(b[:, :, np.newaxis],3,axis=2))
-        axs[i,1].axis('off')
-        axs[i,1].text(50, 200, str(i), c='r', fontsize=10)
+    # segmented_image_dict = {}
 
-    # if function call is from command line, show figure and give command line interface options
-    if trigger is False:
-        fig.show()
-
-        # command line interaction
-        key = ' '
-        keys = [str(i) for i in range(N_cluster)] + ['q']
-        while key not in keys:
-            key = input('Which mask to save? or [q] to quit.  ')
-
-        # quit out of command line interface
-        if key == 'q':
-            return
-        i = int(key)
-        b = np.reshape((p==i)*1,(m,n))
-        io.imsave(file[:-4]+'_'+str(N_cluster)+'.png', (I * np.repeat(b[:, :, np.newaxis],3,axis=2)).astype(np.uint8))
-        # io.imshow(file[:-4]+'_'+str(N_cluster)+'.png')
-
-    elif trigger is True:
-        return [fig, p, m, n]
+    # def save_images(self, save_folder):
+    #     for key, value in self.segmented_image_dict.items():
+    #         base_name = os.path.basename(key)
+    #         savefile = os.path.join(save_folder, base_name[:-4]) + '_' + str(self.n_cluster) + '.png'
+    #         io.imsave(Path(savefile), value)
 
 
-'''FUNCTIONS BELOW ARE FOR GUI FUNCTIONALITY'''
+    '''create figure canvas to be used with tkinter window'''
 
+    @staticmethod
+    def pop_up(fig, subroot):
+        canvas = FigureCanvasTkAgg(fig, master=subroot)
+        canvas.draw()
 
-def cv_segment(image, N_cluster):
+        toolbar = NavigationToolbar2Tk(canvas, subroot, pack_toolbar=False)
+        toolbar.update()
 
-    # image = image[:, :, :3]
-    pixel_vals = image.reshape((-1, 3))
+        canvas.mpl_connect(
+            "key_press_event", lambda event: print(f"you pressed {event.key}"))
+        canvas.mpl_connect("key_press_event", key_press_handler)
 
-    fig = Figure(figsize=(8, 8), dpi=100)
-    axs = fig.subplots(N_cluster - 1, 2)
-    # list for use in elbow graph
-    # wcss = []
-    for i in range(2, N_cluster+1):
-        pixel_vals = np.float32(pixel_vals)
+        button_quit = tk.Button(master=subroot, text="Quit", command=subroot.destroy)
+        return [button_quit, toolbar, canvas]
 
-        '''using cv2 kmeans clustering here as it gives better visual representation of
+    '''toolbar functions for selecting image'''
+
+    @staticmethod
+    def image_selection(subroot, n_cluster, command, canvas, start=1, end=1):
+        options = list(range(start, n_cluster + end))
+        # convert to strings
+        options = [str(x) for x in options]
+        #
+        variable = tk.StringVar(subroot)
+        variable.set(options[0])
+        selector = tk.OptionMenu(subroot, variable, *options, command=command)
+        canvas[0].pack(side=tk.BOTTOM)
+        selector.pack(side=tk.BOTTOM)
+        canvas[1].pack(side=tk.BOTTOM, fill=tk.X)
+        canvas[2].get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+    def background_segmentation(self):
+        folders_to_process, save_folder = utils.search_existing_directories(self.config, self.config["image_folders"],
+                                                                            "background_segmented", "intensity_matched")
+
+        for folder in folders_to_process:
+            for file in os.listdir(folder):
+                image = io.imread(os.path.join(folder, file)).astype(np.uint8)
+
+                image = image[:, :, :3]
+
+                m = image.shape[0]
+                n = image.shape[1]
+
+                # reshape image and apply kMeans
+                x = np.reshape(image, (m * n, 3))
+                model = MiniBatchKMeans(n_clusters=self.n_cluster, init='k-means++', max_iter=100, batch_size=2048, verbose=0,
+                                        compute_labels=True, random_state=None, tol=0.0, max_no_improvement=10, init_size=None,
+                                        n_init=5, reassignment_ratio=0.01).fit(x)
+
+                p = model.predict(x)
+
+                # plot images side by side, original on left, masked image on right. One set for each cluster
+                levels = np.unique(p)
+                fig = plt.figure(figsize=(8, 8), dpi=100)
+                axs = fig.subplots(len(levels), 2)
+                for i in levels:
+                    b = np.reshape((p == i) * 1, (m, n))
+
+                    axs[i, 0].imshow(b)
+                    # axs[i, 0].imshow(image)
+                    axs[i, 0].axis('off')
+
+                    axs[i, 1].imshow(image * np.repeat(b[:, :, np.newaxis], 3, axis=2))
+                    axs[i, 1].axis('off')
+                    axs[i, 1].text(50, 200, str(i+1), c='r', fontsize=10)
+
+                def save_mask(selection):
+                    # new_folder = "background_segmented"
+                    # if new_folder in os.listdir(self.directory):
+                    #     shutil.rmtree(new_folder)
+                    # new_dir = os.path.join(self.directory, new_folder)
+                    i = int(selection)-1
+                    b = np.reshape((p == i) * 1, (m, n))
+                    # folder_name = os.path.basename(folder)
+                    savefile = os.path.join(save_folder, os.path.basename(folder), os.path.basename(file[:-4]), '_'
+                                            + str(self.n_cluster) + '_' + str(selection) + '.png')
+                    io.imsave(Path(savefile), (image * np.repeat(b[:, :, np.newaxis], 3, axis=2)).astype(np.uint8))
+                    self.child_root.quit()
+
+                self.image_selection(self.child_root, self.n_cluster, save_mask, self.pop_up(fig, self.child_root))
+
+    #         add tkinter question to ask if user would like to proceed with segmentation of next folder
+    #           if yes, countinue. if no, break
+
+    '''using cv2 kmeans clustering here as it gives better visual representation of
         image clustering to user than sklearn'''
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-        compactness, labels, centers = cv2.kmeans(pixel_vals, i, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
-        # wcss.append(compactness)
-        # convert data into 8-bit values
-        centers = np.uint8(centers)
-        segmented_data = centers[labels.flatten()]
-        # reshape data into the original image dimensions
-        segmented_image = segmented_data.reshape(image.shape)
-        i = i - 2
-        axs[i, 0].imshow(image)
-        axs[i, 0].axis('off')
 
-        axs[i, 1].imshow(segmented_image)
-        axs[i, 1].axis('off')
-        axs[i, 1].text(50, 200, str(i+2), c='r', fontsize=10)
-    return fig
+    def manual_pattern_segmentation(self):
+        folders_to_process, save_folder = utils.search_existing_directories(self.config, self.config["image_folders"],
+                                                                            "manually_segmented", "intensity_matched")
 
+        # dictionary to collect chosen segmented images. Saved in one process at end of function
+        segmented_image_dict = {}
 
-def segment_gui(folder, N_cluster, toplevel, uv=False):
-    folder = utils.correctPath(folder)
-    if os.path.exists(Path(folder) / ".DS_Store"):
-        os.remove(Path(folder) / ".DS_Store")
+        # function to save images from segmented image dictionary
+        def save_images():
+            for key, value in segmented_image_dict.items():
+                # commented out as basename is taken as key into dictionary
+                # base_name = os.path.basename(key)
+                savefile = os.path.join(save_folder, key[:-4], '_' + str(self.n_cluster) + '.png')
+                io.imsave(Path(savefile), value)
 
-    # for every file in folder run a function that returns the modified image after input to a different function to
-    # save
-    def choose_clusters(file_path):
-        subroot = tk.Toplevel(toplevel)
-        subroot.title(str(file)+" ORIGINAL")
+        for folder in folders_to_process:
+            files = os.listdir(folder)
+            for j in range(len(files)):
+                image = io.imread(Path(os.path.join(folder, files[j]))).astype(np.uint8)
+                image = image[:, :, :3]
 
-        image = io.imread(file_path).astype(np.uint32)
-        if uv:
-            image[image == np.nan] = 0
+                # list for use in elbow graph
+                # wcss = []
 
-        image = image[:, :, :3]
+                m = image.shape[0]
+                n = image.shape[1]
 
-        def choose_segments(n_cluster):
-            seg_root = tk.Toplevel(subroot)
-            seg_root.title(str(file)+" CLUSTERED")
-            # image = io.imread(Path(folder) / file).astype(np.uint32)
-            # n_cluster = int(n_cluster) + 2
-            n_cluster = int(n_cluster)
-            fig, p, m, n = sk_segment(file_path, n_cluster)
+                # reshape image and apply kMeans
+                x = np.reshape(image, (m * n, 3))
+                pixel_vals = np.float32(x)
 
-            def save_mask(selection):
-                i = int(selection)
-                b = np.reshape((p == i) * 1, (m, n))
-                savefile = file[:-4] + '_' + str(n_cluster) + '_' + str(selection) + '.png'
-                io.imsave(Path(folder) / savefile, (image * np.repeat(b[:, :, np.newaxis], 3, axis=2)).astype(np.uint8))
-                seg_root.quit()
+                fig = plt.figure(figsize=(8, 8), dpi=100)
+                axs = fig.subplots(self.n_cluster, 2)
 
-            utils.image_selection(seg_root, n_cluster, save_mask, utils.pop_up(fig, seg_root), end=0)
+                image_dict = {}
 
-            def seg_closing():
-                seg_root.destroy()
+                for k in range(1, self.n_cluster+1):
+                    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+                    compactness, labels, centers = cv2.kmeans(pixel_vals, k, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
 
-            seg_root.protocol("WM_WINDOW_DELETE", seg_closing)
-            tk.mainloop()
-            seg_root.destroy()
-            subroot.quit()
+                    # convert data into 8-bit values
+                    centers = np.uint8(centers)
+                    segmented_data = centers[labels.flatten()]
+                    # reshape data into the original image dimensions
+                    segmented_image = segmented_data.reshape(image.shape)
 
-        utils.image_selection(subroot, N_cluster, choose_segments, utils.pop_up(cv_segment(image=image[:, :, :3],
-                                                                                           N_cluster=N_cluster),
-                                                                                subroot), start=2, end=1)
+                    image_dict[k] = segmented_image
 
-        def sub_closing():
-            subroot.destroy()
-            sys.exit()
+                    i = k - 1
+                    axs[i, 0].imshow(image)
+                    axs[i, 0].axis('off')
 
-        subroot.protocol("WM_WINDOW_DELETE", sub_closing)
-        tk.mainloop()
-        subroot.destroy()
+                    axs[i, 1].imshow(segmented_image)
+                    axs[i, 1].axis('off')
+                    axs[i, 1].text(50, 200, str(k), c='r', fontsize=10)
 
-    for file in fnmatch.filter(sorted(os.listdir(folder)), '*e?.png'):
-        file_path = Path(folder) / file
-        choose_clusters(file_path)
+                def select_mask(selection):
+                    sel = int(selection)
+                    segmented_image_dict[os.path.join(os.path.basename(folder), files[j])] = image_dict[sel-1]
+                    if j == len(files) - 1:
+                        save_images()
+                    self.child_root.quit()
 
-
-if __name__ == '__main__':
-    sk_segment()
+                self.image_selection(self.child_root, self.n_cluster, select_mask, self.pop_up(fig, self.child_root), start=1, end=1)
