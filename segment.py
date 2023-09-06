@@ -18,29 +18,31 @@ import utils
 
 
 class Segmentation:
-    def __init__(self, config, folder=None, n_cluster=None, toplevel=None):
-        self.folder = folder if folder is not None else TypeError
-        self.toplevel = toplevel if toplevel is not None else TypeError
-        if n_cluster is None:
-            self.n_cluster = simpledialog.askinteger("Input", "Number of clusters to use:",
-                                                     parent=self.toplevel, minvalue=0, maxvalue=10)
-        elif type(n_cluster) is int:
-            self.n_cluster = n_cluster
-        else:
-            print("n_cluster setting error")
-        self.child_root = tk.Toplevel(toplevel)
+    def __init__(self, config, n_cluster=None):
+        # self.folder = folder if folder is not None else TypeError
+        # self.toplevel = toplevel if toplevel is not None else TypeError
+        self.child_root = tk.Toplevel()
+        self.n_cluster = n_cluster
+        # if n_cluster is None:
+        #     self.n_cluster = simpledialog.askinteger("Input", "Number of clusters to use:",
+        #                                              parent=self.toplevel, minvalue=0, maxvalue=10)
+        # elif type(n_cluster) is int:
+        #     self.n_cluster = n_cluster
+        # else:
+        #     print("n_cluster setting error")
+        # self.child_root = tk.Toplevel(toplevel)
 
         self.config = utils.read_config(config)
         # self.image_directories = self.config["image_folders"]
-
-        self.file_list = None
-        self.file = None
-        if os.path.isdir(folder):
-            self.directory = Path(folder)
-            self.file_list = [Path(folder) / i for i in fnmatch.filter(sorted(os.listdir(folder)), '*e?.png')]
-        elif os.path.isfile(folder):
-            self.directory = os.path.dirname(folder)
-            self.file = [folder]
+        #
+        # self.file_list = None
+        # self.file = None
+        # if os.path.isdir(folder):
+        #     self.directory = Path(folder)
+        #     self.file_list = [Path(folder) / i for i in fnmatch.filter(sorted(os.listdir(folder)), '*e?.png')]
+        # elif os.path.isfile(folder):
+        #     self.directory = os.path.dirname(folder)
+        #     self.file = [folder]
 
     # segmented_image_dict = {}
 
