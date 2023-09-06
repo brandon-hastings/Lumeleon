@@ -1,0 +1,243 @@
+import sys
+import tkinter as tk
+from pathlib import Path
+from tkinter import ttk
+from tkinter import filedialog
+import utils
+from segment import Segmentation
+from match import IntensityMatch
+from extract import LuminanceExtraction
+
+# Global variable for config file. Set by MainWindow class at initialization, then only referenced by other classes
+config_file = None
+
+
+class DefaultTopFrame(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+        # self.frame = tk.Frame(self)
+
+        self.label = tk.Label(self, text="Config file")
+        self.label.grid(column=0, row=0)
+
+        self.selected_config = tk.StringVar()
+        self.selected_config.set(config_file)
+        self.config_entry = tk.Entry(self, textvariable=self.selected_config,
+                                     width=len(utils.read_config(config_file)["project_path"]), takefocus=False)
+        self.config_entry.grid(column=1, row=0)
+
+        self.config_browse = tk.Button(self, text="Browse", command=self.browse_button)
+        self.config_browse.grid(column=3, row=0)
+
+    def browse_button(self):
+        filetypes = [('yaml files', '.yaml .yml')]
+        global config_file
+        config_file = filedialog.askopenfilename(filetypes=filetypes)
+        self.selected_config.set(config_file)
+
+        # self.frame.pack()
+
+
+class DefaultBottomFrame(tk.Frame):
+    def __init__(self, master, command):
+        super().__init__(master)
+        self.master = master
+        self.command = command
+
+        # self.frame = tk.Frame(self)
+
+        self.button_quit = tk.Button(self, text="Quit", command=self.quit)
+        self.button_quit.grid(column=0, row=0, sticky='w')
+
+        self.button_proceed = tk.Button(self, text="Continue", command=command)
+        self.button_proceed.grid(column=1, row=0, sticky='e')
+
+        # self.frame.pack()
+
+
+class StandardizeImages(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.master = master
+
+        self.top_frame = DefaultTopFrame(master=self)
+
+        self.mid_frame = tk.Frame(master=self)
+
+        self.selection_label = tk.Label(self.mid_frame, text="Select image standardization method")
+        self.selection_label.grid(column=0, row=0)
+        self.selected_value = tk.IntVar()
+        self.standardize = tk.Radiobutton(self.mid_frame, text="Standardize across images",
+                                          value=0, variable=self.selected_value)
+        self.standardize.grid(column=0, row=1)
+        self.reference = tk.Radiobutton(self.mid_frame, text="Use first image as reference",
+                                        value=1, variable=self.selected_value)
+        self.reference.grid(column=0, row=2)
+
+        self.bottom_frame = DefaultBottomFrame(master=self, command=self.button_action)
+
+        self.top_frame.grid(column=0, row=0)
+        self.mid_frame.grid(column=0, row=1)
+        self.bottom_frame.grid(column=0, row=2)
+
+    def button_action(self):
+        if self.selected_value.get() == 0:
+            IntensityMatch(config_file).scale_image_intensity()
+        elif self.selected_value.get() == 1:
+            IntensityMatch(config_file).reference_image()
+        else:
+            raise ValueError("No value selected for image standardization method")
+
+
+class BackgroundSegment(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.master = master
+
+        self.top_frame = DefaultTopFrame(master=self)
+
+        self.mid_frame = tk.Frame(master=self)
+
+        self.label = tk.Label(self.mid_frame, text="Input number of clusters")
+        self.label.grid(column=0, row=0)
+        self.cluster_var = tk.StringVar()
+        self.cluster_entry = tk.Entry(self.mid_frame, textvariable=self.cluster_var, takefocus=True)
+        self.cluster_entry.grid(column=1, row=0)
+
+        self.bottom_frame = DefaultBottomFrame(master=self, command=self.button_action)
+
+        self.top_frame.grid(column=0, row=0)
+        self.mid_frame.grid(column=0, row=1)
+        self.bottom_frame.grid(column=0, row=2)
+
+    def button_action(self):
+        cluster = self.cluster_var.get()
+
+        if cluster is not None:
+
+            try:
+                int_cluster = int(cluster)
+                Segmentation(config_file, n_cluster=int_cluster).background_segmentation()
+            except ValueError:
+                print("value for number of clusters is {}, must be an integer.".format(cluster))
+        else:
+            raise TypeError("No value input for number of clusters")
+
+
+class SegmentPattern(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.master = master
+
+        self.top_frame = DefaultTopFrame(master=self)
+
+        self.mid_frame = tk.Frame(master=self)
+        # Task specific widgets
+        self.selection_label = tk.Label(self.mid_frame, text="Select color pattern segmentation method")
+        self.selection_label.grid(column=0, row=0)
+        self.selected_value = tk.IntVar()
+        self.threshold = tk.Radiobutton(self.mid_frame, text="Threshold values (automatically extracted)",
+                                        value=0, variable=self.selected_value, command=self.disable_entry)
+        self.threshold.grid(column=0, row=1)
+        self.kmeans = tk.Radiobutton(self.mid_frame, text="kMeans segmentation (with user selection)",
+                                     value=1, variable=self.selected_value, command=self.enable_entry)
+        self.kmeans.grid(column=0, row=2)
+
+        self.cluster_label = tk.Label(self.mid_frame, text="Number of clusters:", state='disabled')
+        self.cluster_label.grid(column=0, row=3)
+        self.cluster_var = tk.StringVar()
+        self.cluster_entry = tk.Entry(self.mid_frame, textvariable=self.cluster_var, state='disabled')
+        self.cluster_entry.grid(column=1, row=3)
+
+        self.bottom_frame = DefaultBottomFrame(master=self, command=self.button_action)
+
+        self.top_frame.grid(column=0, row=0)
+        self.mid_frame.grid(column=0, row=1)
+        self.bottom_frame.grid(column=0, row=2)
+
+    def enable_entry(self):
+        self.cluster_label.configure(state='normal')
+        self.cluster_entry.configure(state='normal')
+
+    def disable_entry(self):
+        self.cluster_label.configure(state='disabled')
+        self.cluster_entry.configure(state='disabled')
+
+    def button_action(self):
+        if self.selected_value.get() == 0:
+            LuminanceExtraction(config_file).automatic_color_segmentation()
+
+        elif self.selected_value.get() == 1:
+            cluster = self.cluster_var.get()
+
+            if cluster is not None:
+
+                try:
+                    int_cluster = int(cluster)
+                    Segmentation(config_file, n_cluster=int_cluster).manual_pattern_segmentation()
+                except ValueError:
+                    print("value for number of clusters is {}, must be an integer.".format(cluster))
+            # else cluster variable is None, i.e. not input by the user
+            else:
+                raise TypeError("No value input for number of clusters")
+
+
+class ExtractValues(ttk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.master = master
+
+        self.top_frame = DefaultTopFrame(master=self)
+
+        self.mid_frame = tk.Frame(master=self)
+        # Task specific widgets
+        self.extract_label = tk.Label(master=self.mid_frame, text="Extract manually segmented images")
+        self.extract_label.grid(column=0, row=0)
+
+        self.bottom_frame = DefaultBottomFrame(master=self, command=self.button_action)
+
+        self.top_frame.grid(column=0, row=0)
+        self.mid_frame.grid(column=0, row=1)
+        self.bottom_frame.grid(column=0, row=2)
+
+    @staticmethod
+    def button_action():
+        LuminanceExtraction(config_file).extract_manual_segmentations()
+
+
+class Notebook(ttk.Frame):
+    def __init__(self, container):
+        super().__init__(container)
+        self.container = container
+        self.notebook = ttk.Notebook(container)
+        self.add_tab(StandardizeImages(container), "Image Standardization")
+        self.add_tab(BackgroundSegment(container), "Background Segmentation")
+        self.add_tab(SegmentPattern(container), "Pattern Segmentation")
+        self.add_tab(ExtractValues(container), "Extract color values")
+
+    def add_tab(self, frame, title):
+        self.notebook.add(frame, text=title)
+        self.notebook.pack()
+        # self.notebook.grid(column=0, row=0)
+
+
+class MainWindow(tk.Tk):
+    def __init__(self, config):
+        super().__init__()
+        self.title("Lumeleon")
+        # self.geometry('500x500')
+        self.resizable(True, True)
+
+        global config_file
+        config_file = config
+
+
+def main(config):
+    main_window = MainWindow(config)
+    Notebook(main_window)
+    main_window.mainloop()
+
+
+'''Not intended to be called from command line, but can be done with config file path as argument'''
+if __name__ == "__main__":
+    main(Path(sys.argv[1]))
