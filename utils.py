@@ -75,19 +75,25 @@ def make_folder(project_folder, folder_name):
 def search_existing_directories(config, image_directories, new_folder_name, search_folder_name):
     working_folder = Path(config["project_path"]) / search_folder_name
     save_folder = Path(config["project_path"]) / new_folder_name
-    folders_to_process = []
-    if os.path.exists(save_folder):
-        # folders_to_process = []
-        processed_folders = [os.path.basename(i) for i in os.listdir(save_folder) if os.path.isdir(i)]
-        for i in image_directories:
-            if os.path.basename(i) not in processed_folders:
+
+    if os.path.exists(working_folder):
+        folders_to_process = []
+        if os.path.exists(save_folder):
+            processed_folders = [os.path.basename(i) for i in os.listdir(save_folder) if os.path.isdir(i)]
+            for i in image_directories:
+                if os.path.basename(i) not in processed_folders:
+                    folders_to_process.append(working_folder / os.path.basename(i))
+        else:
+            os.makedirs(save_folder)
+            for i in image_directories:
                 folders_to_process.append(working_folder / os.path.basename(i))
+            return folders_to_process, save_folder
     else:
-        os.makedirs(save_folder)
-        for i in image_directories:
-            folders_to_process.append(working_folder / os.path.basename(i))
-        # folders_to_process = image_directories
-    return folders_to_process, save_folder
+        # TODO: Make more case specific error messages, as some steps (background segmentation) are optional
+        print("Previous step not completed")
+        raise FileNotFoundError(
+            "Directory {} was not found, perhaps the previous step has not been completed?".format(working_folder)
+        )
 
 
 '''find subdirectories in given folder'''
