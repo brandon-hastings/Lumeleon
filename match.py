@@ -8,9 +8,9 @@ import utils
 
 class IntensityMatch:
     def __init__(self, config):
-        self.config = config
+        self.config = utils.read_config(config)
         # self.project_folder = project_folder
-        self.image_type = config["image_type"]
+        self.image_type = self.config["image_type"]
         # self.sub_directory = utils.make_folder(self.project_folder, folder_name="modified")
 
     def reference_image(self):
