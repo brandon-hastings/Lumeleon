@@ -67,6 +67,5 @@ def new_project(project, experimenter, folder, image_type="", working_directory=
     # Write dictionary to yaml  config file
     utils.write_config(projconfigfile, cfg_file)
 
+    print("New Project created")
     return projconfigfile
-
-new_project("test_load", "BTH", ["/Users/brandonhastings/Desktop/modified_images/image/original/VIS/20210623", "/Users/brandonhastings/Desktop/modified_images/image/original/VIS/20210624/modified"], "CR2")
