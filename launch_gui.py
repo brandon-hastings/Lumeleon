@@ -69,7 +69,7 @@ class NewProjectFrame(ttk.Frame):
 
     def select_image_paths(self):
         main_dir = filedialog.askdirectory()
-        sub_dirs = [i for i in os.listdir(main_dir) if os.path.isdir(i)]
+        sub_dirs = [i for i in os.listdir(main_dir) if os.path.isdir(os.path.join(main_dir, i))]
         if len(sub_dirs) > 0:
             self.images_paths = [os.path.join(main_dir, i) for i in sub_dirs]
         elif len(sub_dirs) == 0:
@@ -137,22 +137,25 @@ class ControlFrame(ttk.LabelFrame):
         self.button.grid(column=0, row=3, sticky='e')
 
     def proceed(self):
-        # config_file = None
+        config_file = None
         if self.frames[0].images_paths is None and self.frames[1].config_path is not None:
-            print(self.frames[0].images_paths)
+            # print(self.frames[0].images_paths)
             config_file = self.frames[1].config_path
 
         elif self.frames[0].images_paths is not None and self.frames[1].config_path is None:
-            print(self.frames[0].images_paths)
+            # print(self.frames[0].images_paths)
             config_file = new_project(self.frames[0].project_name_variable.get(),
                                       self.frames[0].experimenter_name_variable.get(),
                                       self.frames[0].images_paths,
                                       image_type=self.frames[0].image_type_box.get())
 
-        # destroy widget then pass config file to new function
-        self.container.destroy()
+        if config_file is not None:
+            # destroy widget then pass config file to new function
+            self.container.destroy()
 
-        main_window.main(config_file)
+            main_window.main(config_file)
+        else:
+            raise ValueError("No config file specified or created.")
 
     # destroy child widgets and replace frame (probably more complicated
     # for widget in self.container.winfo_children():
@@ -182,6 +185,4 @@ class App(tk.Tk):
 
 
 if __name__ == "__main__":
-    # app = App()
     ControlFrame(App()).mainloop()
-    # app.mainloop()
