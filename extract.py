@@ -19,6 +19,8 @@ class LuminanceExtraction:
                                                                             "auto_segment_results",
                                                                             "background_segmented")
         for folder in folders_to_process:
+            subfolder = os.path.join(save_folder, os.path.basename(folder))
+            os.makedirs(subfolder)
 
             overall_luminance = []
             light_values = []
@@ -46,8 +48,8 @@ class LuminanceExtraction:
             luma_values = pd.DataFrame(list(zip(overall_luminance, light_values, dark_values, light_amount, dark_amount)),
                                        columns=["Overall Lum", "Light lum", "Dark lum", "Light prop", "Dark prop"])
 
-            luma_values.to_csv(Path(os.path.join(save_folder, os.path.basename(folder), "luma_values.csv")), sep=',')
-            print("Finished! results saved to: " + save_folder + "luma_values.csv")
+            luma_values.to_csv(Path(os.path.join(subfolder, "luma_values.csv")), sep=',')
+            print("Finished! results saved to: " + subfolder + "luma_values.csv")
 
     # TODO: Masked image is based off sklearn, which segments image with recolorization
     # to correct, get unique values from masked array (image with 4 clusters should have 4 unique colors).
@@ -93,6 +95,8 @@ class LuminanceExtraction:
             return light_luma, dark_luma, light_proportion, dark_proportion
 
         for folder in folders_to_process:
+            subfolder = os.path.join(save_folder, os.path.basename(folder))
+            os.makedirs(subfolder)
             modified_subdirectory = modified_images_folder / os.path.basename(folder)
             modified_images = os.listdir(modified_subdirectory)
 
@@ -121,7 +125,7 @@ class LuminanceExtraction:
             luma_values = pd.DataFrame(list(zip(light_values, dark_values, light_amount, dark_amount)),
                                        columns=["Light lum", "Dark lum", "Light prop", "Dark prop"])
             if len(luma_values) > 0:
-                luma_values.to_csv(Path(os.path.join(save_folder, os.path.basename(folder), "luma_values.csv")), sep=',')
+                luma_values.to_csv(Path(os.path.join(subfolder, "luma_values.csv")), sep=',')
                 print("Finished! luma_values.csv results saved to: {}".format(save_folder))
             else:
                 print("Error: No values calculated for folder {}, output file not saved".format(folder))

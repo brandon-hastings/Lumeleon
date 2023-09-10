@@ -14,14 +14,20 @@ class IntensityMatch:
         # self.sub_directory = utils.make_folder(self.project_folder, folder_name="modified")
 
     def reference_image(self):
-        folders_to_process, save_folder = utils.search_existing_directories(self.config, self.config["image_folders"],
-                                                                            "intensity_matched", "images")
+        folders_to_process, save_folder = utils.search_existing_directories(self.config, self.config["image_folders"], "intensity_matched", "original_images")
+        print(folders_to_process)
+        print(save_folder)
         points = []
         lum_values = []
         for folder in folders_to_process:
+            lum_values.clear()
+            subfolder = os.path.join(save_folder, os.path.basename(folder))
+            os.makedirs(subfolder)
             for file in os.listdir(folder):
-                if file.endswith(self.image_type):
-                    raw = rawpy.imread(Path(os.path.join(folder, file)))
+                points.clear()
+                print(file)
+                if file.lower().endswith(self.image_type):
+                    raw = rawpy.imread(str(Path(os.path.join(folder, file))))
                     img = raw.postprocess()
                     clone = img.copy()
                     WinCoords = utils.SavePoints(img)
@@ -44,24 +50,28 @@ class IntensityMatch:
                         # convert image back to BGR channel
                         img = cv2.cvtColor(clone, cv2.COLOR_HLS2BGR)
                         # save image in RGB not BGR
-                        cv2.imwrite(Path(os.path.join(save_folder, os.path.basename(folder), file[:-4], 'modified.png')), img[:, :, [2, 1, 0]])
+                        cv2.imwrite(str(Path(os.path.join(subfolder, file[:-4]+'modified.png'))), img[:, :, [2, 1, 0]])
 
                     if len(lum_values) == 1:
                         img = cv2.cvtColor(clone, cv2.COLOR_HLS2BGR)
-                        cv2.imwrite(Path(os.path.join(save_folder, os.path.basename(folder), file[:-4], 'ref.png')), img[:, :, [2, 1, 0]])
+                        cv2.imwrite(str(Path(os.path.join(subfolder, file[:-4]+'ref.png'))), img[:, :, [2, 1, 0]])
 
             # os.chdir("../")
 
     def scale_image_intensity(self):
         folders_to_process, save_folder = utils.search_existing_directories(self.config, self.config["image_folders"],
-                                                                            "intensity_matched", "images")
+                                                                            "intensity_matched", "original_images")
         points = []
         lum_values = []
         image_dict = {}
         for folder in folders_to_process:
+            lum_values.clear()
+            subfolder = os.path.join(save_folder, os.path.basename(folder))
+            os.makedirs(subfolder)
             for file in os.listdir(folder):
-                if file.endswith(self.image_type):
-                    raw = rawpy.imread(Path(os.path.join(folder, file)))
+                points.clear()
+                if file.lower().endswith(self.image_type):
+                    raw = rawpy.imread(str(Path(os.path.join(folder, file))))
                     img = raw.postprocess()
                     clone = img.copy()
                     WinCoords = utils.SavePoints(img)
@@ -91,6 +101,6 @@ class IntensityMatch:
                 # convert image back to BGR channel
                 img = cv2.cvtColor(clone, cv2.COLOR_HLS2BGR)
                 # save image in RGB not BGR
-                cv2.imwrite(Path(os.path.join(save_folder, os.path.basename(folder), file_name[:-4], 'modified.png')), img[:, :, [2, 1, 0]])
+                cv2.imwrite(str(Path(os.path.join(subfolder, file_name[:-4]+'modified.png'))), img[:, :, [2, 1, 0]])
 
             # os.chdir("../")

@@ -37,15 +37,18 @@ def new_project(project, experimenter, folder, image_type="", working_directory=
     if len(folder) == 1:
         destination = project_path / "original_images"
         os.makedirs(destination)
+        subfolder = os.path.join(destination, os.path.basename(folder[0]))
+        os.makedirs(subfolder)
         for file_name in os.listdir(folder[0]):
-            # print(folder[0])
-            if file_name.endswith(image_type):
+            if file_name.lower().endswith(image_type):
                 # print(file_name)
                 # construct full file path
                 source = Path(folder[0]) / file_name
+                print(source)
+                print(os.path.join(destination, os.path.basename(folder[0]), os.path.basename(source)))
                 # copy only files
                 if os.path.isfile(source):
-                    shutil.copy(source, destination / os.path.basename(folder[0]))
+                    shutil.copy(source, subfolder)
     if len(folder) > 1:
         destination = project_path / "original_images"
         for directory in folder:

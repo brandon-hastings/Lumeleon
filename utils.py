@@ -87,7 +87,7 @@ def search_existing_directories(config, image_directories, new_folder_name, sear
             os.makedirs(save_folder)
             for i in image_directories:
                 folders_to_process.append(working_folder / os.path.basename(i))
-            return folders_to_process, save_folder
+        return folders_to_process, save_folder
     else:
         # TODO: Make more case specific error messages, as some steps (background segmentation) are optional
         print("Previous step not completed")

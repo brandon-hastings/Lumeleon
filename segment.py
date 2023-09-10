@@ -7,10 +7,8 @@ from pathlib import Path
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from matplotlib.backend_bases import key_press_handler
 import numpy as np
-import fnmatch
 import cv2
 import tkinter as tk
-import shutil
 
 import utils
 
@@ -91,6 +89,8 @@ class Segmentation:
                                                                             "background_segmented", "intensity_matched")
 
         for folder in folders_to_process:
+            subfolder = os.path.join(save_folder, os.path.basename(folder))
+            os.makedirs(subfolder)
             for file in os.listdir(folder):
                 image = io.imread(os.path.join(folder, file)).astype(np.uint8)
 
@@ -130,7 +130,7 @@ class Segmentation:
                     i = int(selection)-1
                     b = np.reshape((p == i) * 1, (m, n))
                     # folder_name = os.path.basename(folder)
-                    savefile = os.path.join(save_folder, os.path.basename(folder), os.path.basename(file[:-4]), '_'
+                    savefile = os.path.join(subfolder, file[:-4]+'_'
                                             + str(self.n_cluster) + '_' + str(selection) + '.png')
                     io.imsave(Path(savefile), (image * np.repeat(b[:, :, np.newaxis], 3, axis=2)).astype(np.uint8))
                     self.child_root.quit()
@@ -159,6 +159,8 @@ class Segmentation:
                 io.imsave(Path(savefile), value)
 
         for folder in folders_to_process:
+            subfolder = os.path.join(save_folder, os.path.basename(folder))
+            os.makedirs(subfolder)
             files = os.listdir(folder)
             for j in range(len(files)):
                 image = io.imread(Path(os.path.join(folder, files[j]))).astype(np.uint8)
