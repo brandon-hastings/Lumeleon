@@ -4,7 +4,7 @@ from pathlib import Path
 from tkinter import ttk
 from tkinter import filedialog
 import utils
-from segment import Segmentation
+from segment import Segmentation, grabcut_segmentation
 from match import IntensityMatch
 from extract import LuminanceExtraction
 
@@ -98,11 +98,25 @@ class BackgroundSegment(tk.Frame):
 
         self.mid_frame = tk.Frame(master=self)
 
-        self.label = tk.Label(self.mid_frame, text="Input number of clusters")
-        self.label.grid(column=0, row=0)
+        self.radio_var = tk.IntVar()
+        self.radio_var.set(0)
+        self.choose_label = tk.Label(self.mid_frame, text="Choose segmentation method")
+        self.choose_label.grid(column=0, row=0)
+        self.kmeans_button = tk.Radiobutton(self.mid_frame, text="K Means", value=0, variable=self.radio_var,
+                                            command=self.enable_entry)
+        self.kmeans_button.grid(column=0, row=1)
+        self.auto_grabcut = tk.Radiobutton(self.mid_frame, text="Automatic grabCut", value=1, variable=self.radio_var,
+                                           command=self.disable_entry)
+        self.auto_grabcut.grid(column=0, row=2)
+        self.man_grabcut = tk.Radiobutton(self.mid_frame, text="Manual grabCut", value=2, variable=self.radio_var,
+                                          command=self.disable_entry)
+        self.man_grabcut.grid(column=0, row=3)
+
+        self.cluster_label = tk.Label(self.mid_frame, text="Number of clusters:")
+        self.cluster_label.grid(column=0, row=4)
         self.cluster_var = tk.StringVar()
         self.cluster_entry = tk.Entry(self.mid_frame, textvariable=self.cluster_var, takefocus=True)
-        self.cluster_entry.grid(column=1, row=0)
+        self.cluster_entry.grid(column=1, row=4)
 
         self.bottom_frame = DefaultBottomFrame(master=self, command=self.button_action)
 
@@ -110,18 +124,31 @@ class BackgroundSegment(tk.Frame):
         self.mid_frame.grid(column=0, row=1)
         self.bottom_frame.grid(column=0, row=2)
 
+    def enable_entry(self):
+        self.cluster_label.configure(state='normal')
+        self.cluster_entry.configure(state='normal')
+
+    def disable_entry(self):
+        self.cluster_label.configure(state='disabled')
+        self.cluster_entry.configure(state='disabled')
+
     def button_action(self):
-        cluster = self.cluster_var.get()
+        if self.radio_var == 0:
+            cluster = self.cluster_var.get()
 
-        if cluster is not None:
+            if cluster is not None:
 
-            try:
-                int_cluster = int(cluster)
-                Segmentation(config_file, n_cluster=int_cluster).background_segmentation()
-            except ValueError:
-                print("value for number of clusters is {}, must be an integer.".format(cluster))
-        else:
-            raise TypeError("No value input for number of clusters")
+                try:
+                    int_cluster = int(cluster)
+                    Segmentation(config_file, n_cluster=int_cluster).background_segmentation()
+                except ValueError:
+                    print("value for number of clusters is {}, must be an integer.".format(cluster))
+            else:
+                raise TypeError("No value input for number of clusters")
+
+        elif self.radio_var == 1:
+            grabcut_segmentation()
+
 
 
 class SegmentPattern(tk.Frame):
