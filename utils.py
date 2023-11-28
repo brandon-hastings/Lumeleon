@@ -96,6 +96,21 @@ def search_existing_directories(config, image_directories, new_folder_name, sear
         )
 
 
+'''given a string file path, find a given folder path and replace it with another folder path'''
+
+
+def replace_path(file_path, find, replace):
+    # normalize given path
+    path = os.path.normpath(str(file_path))
+    # split path on OS specific separator
+    split_path = path.split(os.sep)
+    # replace file path section
+    split_path.insert(split_path.index(find), replace)
+    # join new path
+    new_path = os.path.join(*split_path)
+    return new_path
+
+
 '''find subdirectories in given folder'''
 
 
