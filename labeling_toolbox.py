@@ -26,9 +26,11 @@ def compare_labels(label_names, stored_labels):
     return dict(sorted(stored_labels.items()))
 
 
-class ImageLandmarks:
-    def __init__(self, source_folder, label_names, output_folder=None, image_type=None, toplevel=False,
+class ImageLabelingToolbox:
+    def __init__(self, source_folder, label_names, command, output_folder=None, image_type=None, toplevel=False,
                  thickness=10, image_size=400):
+        if command != "points" or "boxes":
+            raise ValueError
 
         # default thickness
         self.thickness = thickness
@@ -66,6 +68,9 @@ class ImageLandmarks:
         # get label names list
         self.label_names = label_names
 
+        # starting points for bounding box
+        self.start_xy = None
+
         # dictionary that holds the label name: [x, y] points for each image. Is cleared with a new image
         self.stored_xy = {}
 
@@ -96,7 +101,11 @@ class ImageLandmarks:
         # Add PhotoImage to the Canvas
         self.canvas.create_image(0, 0, image=self.photo, anchor=tk.NW)
         # bind click and crop function to mouse click
-        self.canvas.bind('<Button>', self.click_and_crop)
+        if command == "points":
+            self.canvas.bind('<Button>', self.click_and_crop)
+        elif command == "boxes":
+            self.canvas.bind('<Button>', self.start_bounding_box)
+            self.canvas.bind('<ButtonRelease>', self.release_bounding_box)
 
         # create next button
         button_next = tk.Button(master=self.button_frame, text="Next", command=self.next_button)
@@ -141,6 +150,33 @@ class ImageLandmarks:
             #     exception for if it was last point and no label is selected, assumes labeling is complete
             except IndexError:
                 self.next_button()
+
+    def start_bounding_box(self, event):
+        # click again after placing last point to continue to next image
+        if len(self.stored_xy.keys()) == len(self.label_names):
+            self.next_button()
+        else:
+            try:
+                # check if point has been labeled before (for relabeling purposes). If so, delete and relabel
+                if self.label_names[self.radio_int.get()] in self.stored_xy.keys():
+                    self.canvas.delete(self.stored_xy[self.label_names[self.radio_int.get()]][1])
+                self.start_xy = event.x, event.y
+            #     exception for if it was last point and no label is selected, assumes labeling is complete
+            except IndexError:
+                self.next_button()
+
+    def release_bounding_box(self, event):
+        # join tuples of x,y coordinates in form upper x, upper y, lower x, lower y
+        rect = self.start_xy + (event.x, event.y)
+        # create rectangle and return ID
+        rect_id = self.canvas.create_rectangle(rect[0], rect[1], rect[2], rect[3], fill="blue",
+                                               width=20, outline="")
+        # stored xy for each label is list of rect points and rect ID
+        self.stored_xy[self.label_names[self.radio_int.get()]] = [rect, rect_id]
+        # move to next object to be labeled
+        self.radio_int.set(self.radio_int.get() + 1)
+        # reset start xy points
+        self.start_xy = None
 
     '''function to load in image, resize it to given dimensions, and convert to a PIL image type'''
 
