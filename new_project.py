@@ -3,6 +3,8 @@ from pathlib import Path
 import shutil
 import os
 import utils
+import utils.directory_utils
+import utils.yaml_utils
 
 
 def new_project(project, experimenter, folder, image_type="", working_directory=None):
@@ -56,7 +58,7 @@ def new_project(project, experimenter, folder, image_type="", working_directory=
     elif len(folder) == 0:
         print("No folders containing images passed to project file")
 
-    cfg_file, ruamelFile = utils.create_config()
+    cfg_file, ruamelFile = utils.yaml_utils.create_config()
 
     # common parameters:
     cfg_file["Task"] = project
@@ -68,7 +70,7 @@ def new_project(project, experimenter, folder, image_type="", working_directory=
 
     projconfigfile = os.path.join(str(project_path), "config.yaml")
     # Write dictionary to yaml  config file
-    utils.write_config(projconfigfile, cfg_file)
+    utils.yaml_utils.write_config(projconfigfile, cfg_file)
 
     print("New Project created")
     return projconfigfile
