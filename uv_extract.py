@@ -5,11 +5,12 @@ import fnmatch
 import pandas as pd
 import numpy as np
 import utils
+import utils.directory_utils
 
 
 def main(folder, body_part=""):
     print("Extracting luminance values...")
-    folder = utils.correctPath(folder)
+    folder = utils.directory_utils.correct_path(folder)
 
     masked = fnmatch.filter(sorted(os.listdir(folder)), '*_?.png')
     original = fnmatch.filter(sorted(os.listdir(folder)), '*e?.png')

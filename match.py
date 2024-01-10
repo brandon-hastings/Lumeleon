@@ -3,18 +3,69 @@ import cv2
 import rawpy
 import os
 from pathlib import Path
-import utils
+import utils.directory_utils
+import utils.yaml_utils
+
+'''functions used for area selection in image intesity matching'''
+
+
+def click_and_crop(event, x, y, flags, param):
+    global img,refPt, cropping
+    if len(refPt) == 2:
+        return
+    else:
+        if event == cv2.EVENT_LBUTTONDOWN:
+            refPt = [(x, y)]
+            cropping = True
+        elif event == cv2.EVENT_LBUTTONUP:
+            refPt.append((x, y))
+            cropping = False
+            cv2.rectangle(img, refPt[0], refPt[1], (0, 255, 0), 5)
+            cv2.imshow("image", img[:,:,[2,1,0]])
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            cv2.putText(img, 'Proceed? [y/n]', (50,150),
+                  font, 5, (255, 0, 0), 8)
+
+
+def SavePoints(I):
+    global img,refPt, cropping
+    refPt = []
+    cropping = False
+    img = I
+    clone = img.copy()
+
+    scale = 0.25
+    h = int(scale * img.shape[0])
+    w = int(scale * img.shape[1])
+
+    while True:
+        cv2.namedWindow('image', cv2.WINDOW_KEEPRATIO)
+        cv2.imshow('image', img[:,:,[2,1,0]])
+        cv2.resizeWindow('image', w, h)
+
+        cv2.setMouseCallback('image', click_and_crop)
+
+
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord("n"):
+            img = clone.copy()
+            refPt = []
+
+        elif key == ord("y"):
+            cv2.destroyAllWindows()
+            break
+    return refPt
 
 
 class IntensityMatch:
     def __init__(self, config):
-        self.config = utils.read_config(config)
+        self.config = utils.yaml_utils.read_config(config)
         # self.project_folder = project_folder
         self.image_type = self.config["image_type"]
         # self.sub_directory = utils.make_folder(self.project_folder, folder_name="modified")
 
     def reference_image(self):
-        folders_to_process, save_folder = utils.search_existing_directories(self.config, self.config["image_folders"], "intensity_matched", "original_images")
+        folders_to_process, save_folder = utils.directory_utils.search_existing_directories(self.config, "intensity_matched", "original_images")
         print(folders_to_process)
         print(save_folder)
         points = []
@@ -30,7 +81,7 @@ class IntensityMatch:
                     raw = rawpy.imread(str(Path(os.path.join(folder, file))))
                     img = raw.postprocess()
                     clone = img.copy()
-                    WinCoords = utils.SavePoints(img)
+                    WinCoords = SavePoints(img)
                     points.append(WinCoords)
                     Y = [points[-1][0][1], points[-1][1][1]]
                     X = [points[-1][0][0], points[-1][1][0]]
@@ -59,7 +110,7 @@ class IntensityMatch:
             # os.chdir("../")
 
     def scale_image_intensity(self):
-        folders_to_process, save_folder = utils.search_existing_directories(self.config, self.config["image_folders"],
+        folders_to_process, save_folder = utils.directory_utils.search_existing_directories(self.config,
                                                                             "intensity_matched", "original_images")
         points = []
         lum_values = []
@@ -74,7 +125,7 @@ class IntensityMatch:
                     raw = rawpy.imread(str(Path(os.path.join(folder, file))))
                     img = raw.postprocess()
                     clone = img.copy()
-                    WinCoords = utils.SavePoints(img)
+                    WinCoords = SavePoints(img)
                     points.append(WinCoords)
                     Y = [points[-1][0][1], points[-1][1][1]]
                     X = [points[-1][0][0], points[-1][1][0]]

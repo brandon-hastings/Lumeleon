@@ -7,15 +7,18 @@ import numpy as np
 import utils
 from pathlib import Path
 
+import utils.directory_utils
+import utils.yaml_utils
+
 
 class LuminanceExtraction:
     def __init__(self, config):
-        self.config = utils.read_config(config)
+        self.config = utils.yaml_utils.read_config(config)
 
     # results = {}
 
     def automatic_color_segmentation(self):
-        folders_to_process, save_folder = utils.search_existing_directories(self.config, self.config["image_folders"],
+        folders_to_process, save_folder = utils.directory_utils.search_existing_directories(self.config,
                                                                             "auto_segment_results",
                                                                             "background_segmented")
         for folder in folders_to_process:
@@ -56,7 +59,7 @@ class LuminanceExtraction:
     # color to mask, in this case melanistic color, will have lowest value
 
     def extract_manual_segmentations(self):
-        folders_to_process, save_folder = utils.search_existing_directories(self.config, self.config["image_folders"],
+        folders_to_process, save_folder = utils.directory_utils.search_existing_directories(self.config,
                                                                             "manual_segment_results",
                                                                             "manually_segmented")
 

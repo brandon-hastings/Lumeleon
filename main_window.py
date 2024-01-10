@@ -4,9 +4,20 @@ from pathlib import Path
 from tkinter import ttk
 from tkinter import filedialog
 import utils
-from segment import Segmentation
+import utils.directory_utils
+import utils.yaml_utils
+from segment import Segmentation, grabcut_segmentation
+from labeling_toolbox import ImageLabelingToolbox
 from match import IntensityMatch
 from extract import LuminanceExtraction
+
+"""Main window showing the following project steps on tk notebook tabs:
+Label Images
+Standardize Images
+Background Segmentation
+Pattern Segmentation
+Extract Color Values"""
+
 
 # Global variable for config file. Set by MainWindow class at initialization, then only referenced by other classes
 config_file = None
@@ -23,7 +34,7 @@ class DefaultTopFrame(tk.Frame):
         self.selected_config = tk.StringVar()
         self.selected_config.set(config_file)
         self.config_entry = tk.Entry(self, textvariable=self.selected_config,
-                                     width=len(utils.read_config(config_file)["project_path"]), takefocus=False)
+                                     width=len(utils.yaml_utils.read_config(config_file)["project_path"]), takefocus=False)
         self.config_entry.grid(column=1, row=0)
 
         self.config_browse = tk.Button(self, text="Browse", command=self.browse_button)
@@ -53,6 +64,59 @@ class DefaultBottomFrame(tk.Frame):
         self.button_proceed.grid(column=1, row=0, sticky='e')
 
         # self.frame.pack()
+
+
+class LabelImages(tk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.master = master
+
+        self.top_frame = DefaultTopFrame(master=self)
+
+        self.mid_frame = tk.Frame(master=self)
+
+        self.selection_label = tk.Label(self.mid_frame, text="Select image labeling method")
+        self.selection_label.grid(column=0, row=0)
+        self.selected_value = tk.IntVar()
+        self.bounding_box = tk.Radiobutton(self.mid_frame, text="Bounding boxes",
+                                          value=0, variable=self.selected_value)
+        self.bounding_box.grid(column=0, row=1)
+        self.keypoint = tk.Radiobutton(self.mid_frame, text="Keypoint labeling",
+                                        value=1, variable=self.selected_value)
+        self.keypoint.grid(column=0, row=2)
+
+        self.ml_label = tk.Label(self.mid_frame, text="Labeling for machine learning?")
+        self.ml_label.grid(column=0, row=3)
+        self.selected_value_ml = tk.IntVar()
+        self.confirm = tk.Radiobutton(self.mid_frame, text="Yes",
+                                           value=0, variable=self.selected_value_ml)
+        self.confirm.grid(column=0, row=4, sticky="W")
+        self.deny = tk.Radiobutton(self.mid_frame, text="No",
+                                       value=1, variable=self.selected_value_ml)
+        self.deny.grid(column=0, row=4, sticky="E")
+
+        self.bottom_frame = DefaultBottomFrame(master=self, command=self.button_action)
+
+        self.top_frame.grid(column=0, row=0)
+        self.mid_frame.grid(column=0, row=1)
+        self.bottom_frame.grid(column=0, row=2)
+
+    def button_action(self):
+        if self.selected_value_ml.get() == 0:
+            ml = True
+        elif self.selected_value_ml.get() == 1:
+            ml = False
+        else:
+            # if not selected
+            ml = False
+        if self.selected_value.get() == 0:
+            ImageLabelingToolbox(config_file, command="boxes", machine_learning=ml, toplevel=True)
+        elif self.selected_value.get() == 1:
+            selected_images_folder = filedialog.askdirectory(title="Select images folder to label points")
+            ImageLabelingToolbox(config_file, command="points", machine_learning=ml, toplevel=True,
+                                 search_folder=selected_images_folder)
+        else:
+            raise ValueError("No value selected for image standardization method")
 
 
 class StandardizeImages(tk.Frame):
@@ -98,11 +162,25 @@ class BackgroundSegment(tk.Frame):
 
         self.mid_frame = tk.Frame(master=self)
 
-        self.label = tk.Label(self.mid_frame, text="Input number of clusters")
-        self.label.grid(column=0, row=0)
+        self.radio_var = tk.IntVar()
+        self.radio_var.set(0)
+        self.choose_label = tk.Label(self.mid_frame, text="Choose segmentation method")
+        self.choose_label.grid(column=0, row=0)
+        self.kmeans_button = tk.Radiobutton(self.mid_frame, text="K Means", value=0, variable=self.radio_var,
+                                            command=self.enable_entry)
+        self.kmeans_button.grid(column=0, row=1)
+        self.auto_grabcut = tk.Radiobutton(self.mid_frame, text="Automatic grabCut", value=1, variable=self.radio_var,
+                                           command=self.disable_entry)
+        self.auto_grabcut.grid(column=0, row=2)
+        self.man_grabcut = tk.Radiobutton(self.mid_frame, text="Manual grabCut", value=2, variable=self.radio_var,
+                                          command=self.disable_entry)
+        self.man_grabcut.grid(column=0, row=3)
+
+        self.cluster_label = tk.Label(self.mid_frame, text="Number of clusters:")
+        self.cluster_label.grid(column=0, row=4)
         self.cluster_var = tk.StringVar()
         self.cluster_entry = tk.Entry(self.mid_frame, textvariable=self.cluster_var, takefocus=True)
-        self.cluster_entry.grid(column=1, row=0)
+        self.cluster_entry.grid(column=1, row=4)
 
         self.bottom_frame = DefaultBottomFrame(master=self, command=self.button_action)
 
@@ -110,18 +188,31 @@ class BackgroundSegment(tk.Frame):
         self.mid_frame.grid(column=0, row=1)
         self.bottom_frame.grid(column=0, row=2)
 
+    def enable_entry(self):
+        self.cluster_label.configure(state='normal')
+        self.cluster_entry.configure(state='normal')
+
+    def disable_entry(self):
+        self.cluster_label.configure(state='disabled')
+        self.cluster_entry.configure(state='disabled')
+
     def button_action(self):
-        cluster = self.cluster_var.get()
+        if self.radio_var == 0:
+            cluster = self.cluster_var.get()
 
-        if cluster is not None:
+            if cluster is not None:
 
-            try:
-                int_cluster = int(cluster)
-                Segmentation(config_file, n_cluster=int_cluster).background_segmentation()
-            except ValueError:
-                print("value for number of clusters is {}, must be an integer.".format(cluster))
-        else:
-            raise TypeError("No value input for number of clusters")
+                try:
+                    int_cluster = int(cluster)
+                    Segmentation(config_file, n_cluster=int_cluster).background_segmentation()
+                except ValueError:
+                    print("value for number of clusters is {}, must be an integer.".format(cluster))
+            else:
+                raise TypeError("No value input for number of clusters")
+
+        elif self.radio_var == 1:
+            grabcut_segmentation(config_file)
+
 
 
 class SegmentPattern(tk.Frame):
@@ -210,6 +301,7 @@ class Notebook(ttk.Frame):
         super().__init__(container)
         self.container = container
         self.notebook = ttk.Notebook(container)
+        self.add_tab(LabelImages(container), "Label Images")
         self.add_tab(StandardizeImages(container), "Image Standardization")
         self.add_tab(BackgroundSegment(container), "Background Segmentation")
         self.add_tab(SegmentPattern(container), "Pattern Segmentation")
