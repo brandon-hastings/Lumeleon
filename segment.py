@@ -1,175 +1,337 @@
 import os
+
+import scipy.stats
 from skimage import io
 from sklearn.cluster import MiniBatchKMeans
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
+from tkinter import simpledialog
 from pathlib import Path
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
+from matplotlib.backend_bases import key_press_handler
 import numpy as np
-import fnmatch
-import sys
+import pandas as pd
 import cv2
-import utils
 import tkinter as tk
+
+import utils
+import utils.directory_utils
+import utils.yaml_utils
+
+"""Process for grabCut based segmentation with or without kmeans preprocessing"""
+
+# TODO: machine_labeled will default to false unitl yolov5 labeling is properly tested
+
+
+def grabcut_segmentation(config_file, machine_labeled=False, apply_kmeans=False):
+    config = utils.yaml_utils.read_config(config_file)
+    # TODO: Figure out file placement for machine learning vs hand labelled bounding boxes
+    if machine_labeled is False:
+        bounding_box_coord_file = os.path.join(config["project_path"], "bounding_boxes", "labeled_images.csv")
+    elif machine_labeled is True:
+        # TODO: csv structure is different for yolov5 outputs. Will need to handle data manipulation
+        bounding_box_coord_file = os.path.join(config["project_path"], "bounding_boxes", )
+    if apply_kmeans is not bool:
+        raise TypeError(
+            f"argument apply_kmeans must be true or false, not {apply_kmeans}"
+        )
+    if str(bounding_box_coord_file).lower().endswith('csv') is False:
+        raise ValueError(
+            # separate file extension from given file path if not csv to show in error message
+            f"bounding box coordinates file type must be .csv, not "
+            f"{os.path.splitext(os.path.basename(bounding_box_coord_file))[1]}"
+        )
+    else:
+        image_points_df = pd.read_csv(Path(bounding_box_coord_file))
+
+    # image must be an intensity matched image
+    image_paths = list(image_points_df.index.values)
+
+    for i in range(len(image_paths)):
+        # path in csv is from original_images, replace to use intensity_matched images
+        load_file = utils.directory_utils.replace_path(image_paths[i], 'original_images', 'intensity_matched')
+
+        # path in csv is from original_images, replace to use background_segmented for saving images
+        save_file = utils.directory_utils.replace_path(image_paths[i], 'original_images', 'background_segmented')
+
+        # load image
+        image = cv2.imread(str(load_file))
+
+        '''If apply_kmeans is True, image will be cropped to bounding box coordinates for the given image,
+        then kmeans will use a cluster of k=2 to separate the image into a foreground and background mask,
+        then run through grabCut algorithm with an iteration of 5 to refine mask.
+        If apply_kmeans is False, entire image will be used and the bounding box coordinates will be used to
+        draw the rectangle separating the probable foreground and background, then run through the grabCut algorithm
+        with an iteration of 5 to identify the probable location of the animal.'''
+
+        if apply_kmeans is True:
+
+            # TODO: check to make sure cropping axes are correct. Ensure bounding box values are for the animal
+            #  and not the color standard
+            '''bounding box of reflectance standard will always be last two columns in image_points_df'''
+            # crop image based on bounding box coordinates for easier kmeans segmentation
+            image = image[image_points_df.iloc[i, 0][1]:image_points_df.iloc[i, 1][1],
+                    image_points_df.iloc[i, 0][0]:image_points_df.iloc[i, 1][0],
+                    :3]
+
+            m = image.shape[0]
+            n = image.shape[1]
+
+            pixel_vals = np.float32(np.reshape(image, (m * n, 3)))
+
+            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+            compactness, labels, centers = cv2.kmeans(pixel_vals, 2, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+
+            # convert data into 8-bit values
+            # centers = np.uint8(centers)
+            # segmented_data = centers[labels.flatten()]
+            # # reshape data into the original image dimensions
+            # mask = segmented_data.reshape(image.shape)
+            # mask = labels
+
+            '''create probable foreground and background areas based on kmeans labels
+            theoretically should be a "padding" of background between image edge and animal with a different label
+            this finds which cluster that padding is assigned to and uses it as the probable background'''
+            # TODO: make sure no color patches on the animal are assigned to the background mask, creating "holes"
+            #  in the foreground mask
+            outside_mode = scipy.stats.mode(np.concatenate(labels[0, :], labels[:, 0], labels[-1, :],
+                                                           labels[:, -1]))
+            image[labels != outside_mode] = cv2.GC_PR_FCD
+            image[labels == outside_mode] = cv2.GC_PR_BCG
+
+            # create probable foreground and background areas based on kmeans labels
+            # image[labels > 0] = cv2.GC_PR_FCD
+            # image[labels == 0] = cv2.GC_PR_BCG
+
+            # create mask from kmeans labels
+            input_mask = labels
+            # rectangle not needed for mask based grabCut initialization, so set to None
+            rect = None
+            # will initialize grabCut using the mask method
+            mode = cv2.GC_INIT_WITH_MASK
+
+        # because apply_kmeans was checked for boolean type, else must be False
+        else:
+            # create mask from image
+            input_mask = np.zeros(image.shape[:2], dtype="uint8")
+            # joining tuples of upper left and lower right bounding box points to create "drawn" rectangle
+            rect = image_points_df.iloc[i, 0] + image_points_df.iloc[i, 1]
+            # will initialize grabCut using the rectangular bounding box method
+            mode = cv2.GC_INIT_WITH_RECT
+
+        # create foreground and background masks
+        fg_model = np.zeros((1, 65), dtype="float")
+        bg_model = np.zeros((1, 65), dtype="float")
+        (mask, bg_model, fg_model) = cv2.grabCut(image, input_mask, rect, fgdModel=fg_model, bgdModel=bg_model,
+                                                 iterCount=5,
+                                                 mode=mode)
+        outputMask = np.where((mask == cv2.GC_BGD) | (mask == cv2.GC_PR_BGD),
+                              0, 1)
+        # TODO: Ensure color values are scaled properly
+        # scale the mask from the range [0, 1] to [0, 255]
+        outputMask = (outputMask * 255).astype("uint8")
+        # apply bitwise AND to the image using our mask generated by GrabCut to generate our final output image
+        output = cv2.bitwise_and(image, image, mask=outputMask)
+        # save output image to reconstructed save file path
+        cv2.imwrite(save_file, output)
 
 
 '''MAIN SEGMENTATION METHOD VIA KMEANS SKIMAGE, CALLABLE FROM COMMAND LINE OR GUI'''
 
 
-def sk_segment(file=None, N_cluster=None):
-    trigger = False
-    if None not in (file, N_cluster):
-        file = file
-        N_cluster = N_cluster
-        trigger = True
-    else:
-        if len(sys.argv) != 3:
-            print("usage:python match.py image N_clusters")
-            return
-    
-        file = sys.argv[1]
-        N_cluster = int(sys.argv[2])
-    
-    I = io.imread(file).astype(np.uint8)
-    
-    I = I[:,:,:3]
-    
-#    I = I - np.min(I)
-#    I = I / np.max(I)
-    
-    m = I.shape[0]
-    n = I.shape[1]
-    
-    
-    x = np.reshape(I, (m*n, 3))
-    model = MiniBatchKMeans(n_clusters= N_cluster, init='k-means++', max_iter=100, batch_size=2048, verbose=0, compute_labels=True, random_state=None, tol=0.0, max_no_improvement=10, init_size=None, n_init=5, reassignment_ratio=0.01).fit(x)
-    
-    p = model.predict(x)
-    
-    levels = np.unique(p)
-    fig = plt.figure(figsize=(8,8), dpi=100)
-    axs = fig.subplots(len(levels),2)
-    for i in levels:
-        b = np.reshape((p==i)*1,(m,n))
-        
-        axs[i,0].imshow(b)
-        axs[i,0].axis('off')
-        
-        axs[i,1].imshow(I * np.repeat(b[:, :, np.newaxis],3,axis=2))
-        axs[i,1].axis('off')
-        axs[i,1].text(50, 200, str(i), c='r', fontsize=10)
+class Segmentation:
+    def __init__(self, config, n_cluster=None):
+        # self.folder = folder if folder is not None else TypeError
+        # self.toplevel = toplevel if toplevel is not None else TypeError
+        self.child_root = tk.Toplevel()
+        self.n_cluster = n_cluster
+        # if n_cluster is None:
+        #     self.n_cluster = simpledialog.askinteger("Input", "Number of clusters to use:",
+        #                                              parent=self.toplevel, minvalue=0, maxvalue=10)
+        # elif type(n_cluster) is int:
+        #     self.n_cluster = n_cluster
+        # else:
+        #     print("n_cluster setting error")
+        # self.child_root = tk.Toplevel(toplevel)
 
-    if trigger is False:
-        fig.show()
-        
-        key = ' '
-        keys = [str(i) for i in range(N_cluster)] + ['q']
-        while key not in keys:
-            key = input('Which mask to save? or [q] to quit.  ')
-            
-        if key == 'q':
-            return
-        i = int(key)
-        b = np.reshape((p==i)*1,(m,n))
-        io.imsave(file[:-4]+'_'+str(N_cluster)+'.png', (I * np.repeat(b[:, :, np.newaxis],3,axis=2)).astype(np.uint8))
-        # io.imshow(file[:-4]+'_'+str(N_cluster)+'.png')
+        self.config = utils.yaml_utils.read_config(config)
+        # self.image_directories = self.config["image_folders"]
+        #
+        # self.file_list = None
+        # self.file = None
+        # if os.path.isdir(folder):
+        #     self.directory = Path(folder)
+        #     self.file_list = [Path(folder) / i for i in fnmatch.filter(sorted(os.listdir(folder)), '*e?.png')]
+        # elif os.path.isfile(folder):
+        #     self.directory = os.path.dirname(folder)
+        #     self.file = [folder]
 
-    elif trigger is True:
-        return [fig, p, m, n]
+    # segmented_image_dict = {}
 
+    # def save_images(self, save_folder):
+    #     for key, value in self.segmented_image_dict.items():
+    #         base_name = os.path.basename(key)
+    #         savefile = os.path.join(save_folder, base_name[:-4]) + '_' + str(self.n_cluster) + '.png'
+    #         io.imsave(Path(savefile), value)
 
-'''FUNCTIONS BELOW ARE FOR GUI FUNCTIONALITY'''
+    '''create figure canvas to be used with tkinter window'''
 
+    @staticmethod
+    def pop_up(fig, subroot):
+        canvas = FigureCanvasTkAgg(fig, master=subroot)
+        canvas.draw()
 
-def cv_segment(image, N_cluster):
+        toolbar = NavigationToolbar2Tk(canvas, subroot, pack_toolbar=False)
+        toolbar.update()
 
-    # image = image[:, :, :3]
-    pixel_vals = image.reshape((-1, 3))
+        canvas.mpl_connect(
+            "key_press_event", lambda event: print(f"you pressed {event.key}"))
+        canvas.mpl_connect("key_press_event", key_press_handler)
 
-    fig = Figure(figsize=(8, 8), dpi=100)
-    axs = fig.subplots(N_cluster - 1, 2)
-    # list for use in elbow graph
-    # wcss = []
-    for i in range(2, N_cluster+1):
-        pixel_vals = np.float32(pixel_vals)
+        button_quit = tk.Button(master=subroot, text="Quit", command=subroot.destroy)
+        return [button_quit, toolbar, canvas]
 
-        '''using cv2 kmeans clustering here as it gives better visual representation of
+    '''toolbar functions for selecting image'''
+
+    @staticmethod
+    def image_selection(subroot, n_cluster, command, canvas, start=1, end=1):
+        options = list(range(start, n_cluster + end))
+        # convert to strings
+        options = [str(x) for x in options]
+        #
+        variable = tk.StringVar(subroot)
+        variable.set(options[0])
+        selector = tk.OptionMenu(subroot, variable, *options, command=command)
+        canvas[0].pack(side=tk.BOTTOM)
+        selector.pack(side=tk.BOTTOM)
+        canvas[1].pack(side=tk.BOTTOM, fill=tk.X)
+        canvas[2].get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+    def background_segmentation(self):
+        folders_to_process, save_folder = utils.directory_utils.search_existing_directories(self.config,
+                                                                            "background_segmented", "intensity_matched")
+
+        for folder in folders_to_process:
+            subfolder = os.path.join(save_folder, os.path.basename(folder))
+            os.makedirs(subfolder)
+            for file in os.listdir(folder):
+                image = io.imread(os.path.join(folder, file)).astype(np.uint8)
+
+                image = image[:, :, :3]
+
+                m = image.shape[0]
+                n = image.shape[1]
+
+                # reshape image and apply kMeans
+                x = np.reshape(image, (m * n, 3))
+                model = MiniBatchKMeans(n_clusters=self.n_cluster, init='k-means++', max_iter=100, batch_size=2048,
+                                        verbose=0,
+                                        compute_labels=True, random_state=None, tol=0.0, max_no_improvement=10,
+                                        init_size=None,
+                                        n_init=5, reassignment_ratio=0.01).fit(x)
+
+                p = model.predict(x)
+
+                # plot images side by side, original on left, masked image on right. One set for each cluster
+                levels = np.unique(p)
+                fig = plt.figure(figsize=(8, 8), dpi=100)
+                axs = fig.subplots(len(levels), 2)
+                for i in levels:
+                    b = np.reshape((p == i) * 1, (m, n))
+
+                    axs[i, 0].imshow(b)
+                    # axs[i, 0].imshow(image)
+                    axs[i, 0].axis('off')
+
+                    axs[i, 1].imshow(image * np.repeat(b[:, :, np.newaxis], 3, axis=2))
+                    axs[i, 1].axis('off')
+                    axs[i, 1].text(50, 200, str(i + 1), c='r', fontsize=10)
+
+                def save_mask(selection):
+                    # new_folder = "background_segmented"
+                    # if new_folder in os.listdir(self.directory):
+                    #     shutil.rmtree(new_folder)
+                    # new_dir = os.path.join(self.directory, new_folder)
+                    i = int(selection) - 1
+                    b = np.reshape((p == i) * 1, (m, n))
+                    # folder_name = os.path.basename(folder)
+                    savefile = os.path.join(subfolder, file[:-4] + '_'
+                                            + str(self.n_cluster) + '_' + str(selection) + '.png')
+                    io.imsave(Path(savefile), (image * np.repeat(b[:, :, np.newaxis], 3, axis=2)).astype(np.uint8))
+                    self.child_root.quit()
+
+                self.image_selection(self.child_root, self.n_cluster, save_mask, self.pop_up(fig, self.child_root))
+
+    #         add tkinter question to ask if user would like to proceed with segmentation of next folder
+    #           if yes, countinue. if no, break
+
+    '''using cv2 kmeans clustering here as it gives better visual representation of
         image clustering to user than sklearn'''
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-        compactness, labels, centers = cv2.kmeans(pixel_vals, i, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
-        # wcss.append(compactness)
-        # convert data into 8-bit values
-        centers = np.uint8(centers)
-        segmented_data = centers[labels.flatten()]
-        # reshape data into the original image dimensions
-        segmented_image = segmented_data.reshape(image.shape)
-        i = i - 2
-        axs[i, 0].imshow(image)
-        axs[i, 0].axis('off')
 
-        axs[i, 1].imshow(segmented_image)
-        axs[i, 1].axis('off')
-        axs[i, 1].text(50, 200, str(i+2), c='r', fontsize=10)
-    return fig
+    def manual_pattern_segmentation(self):
+        folders_to_process, save_folder = utils.directory_utils.search_existing_directories(self.config,
+                                                                            "manually_segmented", "intensity_matched")
 
+        # dictionary to collect chosen segmented images. Saved in one process at end of function
+        segmented_image_dict = {}
 
-def segment_gui(folder, N_cluster, toplevel, uv=False):
-    folder = utils.correctPath(folder)
-    if os.path.exists(Path(folder) / ".DS_Store"):
-        os.remove(Path(folder) / ".DS_Store")
+        # function to save images from segmented image dictionary
+        def save_images():
+            for key, value in segmented_image_dict.items():
+                # commented out as basename is taken as key into dictionary
+                # base_name = os.path.basename(key)
+                savefile = os.path.join(save_folder, key[:-4]) + '_' + str(self.n_cluster) + '.png'
+                io.imsave(Path(savefile), value)
 
-    # for every file in folder run a function that returns the modified image after input to a different function to
-    # save
-    def choose_clusters(file_path):
-        subroot = tk.Toplevel(toplevel)
-        subroot.title(str(file)+" ORIGINAL")
+        for folder in folders_to_process:
+            subfolder = os.path.join(save_folder, os.path.basename(folder))
+            os.makedirs(subfolder)
+            files = os.listdir(folder)
+            for j in range(len(files)):
+                image = io.imread(Path(os.path.join(folder, files[j]))).astype(np.uint8)
+                image = image[:, :, :3]
 
-        image = io.imread(file_path).astype(np.uint32)
-        if uv:
-            image[image == np.nan] = 0
+                # list for use in elbow graph
+                # wcss = []
 
-        image = image[:, :, :3]
+                m = image.shape[0]
+                n = image.shape[1]
 
-        def choose_segments(n_cluster):
-            seg_root = tk.Toplevel(subroot)
-            seg_root.title(str(file)+" CLUSTERED")
-            # image = io.imread(Path(folder) / file).astype(np.uint32)
-            # n_cluster = int(n_cluster) + 2
-            n_cluster = int(n_cluster)
-            fig, p, m, n = sk_segment(file_path, n_cluster)
+                # reshape image and apply kMeans
+                x = np.reshape(image, (m * n, 3))
+                pixel_vals = np.float32(x)
 
-            def save_mask(selection):
-                i = int(selection)
-                b = np.reshape((p == i) * 1, (m, n))
-                savefile = file[:-4] + '_' + str(n_cluster) + '_' + str(selection) + '.png'
-                io.imsave(Path(folder) / savefile, (image * np.repeat(b[:, :, np.newaxis], 3, axis=2)).astype(np.uint8))
-                seg_root.quit()
+                fig = plt.figure(figsize=(8, 8), dpi=100)
+                axs = fig.subplots(self.n_cluster, 2)
 
-            utils.image_selection(seg_root, n_cluster, save_mask, utils.pop_up(fig, seg_root), end=0)
+                image_dict = {}
 
-            def seg_closing():
-                seg_root.destroy()
+                for k in range(1, self.n_cluster + 1):
+                    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+                    compactness, labels, centers = cv2.kmeans(pixel_vals, k, None, criteria, 10,
+                                                              cv2.KMEANS_RANDOM_CENTERS)
 
-            seg_root.protocol("WM_WINDOW_DELETE", seg_closing)
-            tk.mainloop()
-            seg_root.destroy()
-            subroot.quit()
+                    # convert data into 8-bit values
+                    centers = np.uint8(centers)
+                    segmented_data = centers[labels.flatten()]
+                    # reshape data into the original image dimensions
+                    segmented_image = segmented_data.reshape(image.shape)
 
-        utils.image_selection(subroot, N_cluster, choose_segments, utils.pop_up(cv_segment(image=image[:, :, :3],
-                                                                                           N_cluster=N_cluster),
-                                                                                subroot), start=2, end=1)
+                    image_dict[k] = segmented_image
 
-        def sub_closing():
-            subroot.destroy()
-            sys.exit()
+                    i = k - 1
+                    axs[i, 0].imshow(image)
+                    axs[i, 0].axis('off')
 
-        subroot.protocol("WM_WINDOW_DELETE", sub_closing)
-        tk.mainloop()
-        subroot.destroy()
+                    axs[i, 1].imshow(segmented_image)
+                    axs[i, 1].axis('off')
+                    axs[i, 1].text(50, 200, str(k), c='r', fontsize=10)
 
-    for file in fnmatch.filter(sorted(os.listdir(folder)), '*e?.png'):
-        file_path = Path(folder) / file
-        choose_clusters(file_path)
+                def select_mask(selection):
+                    sel = int(selection)
+                    segmented_image_dict[os.path.join(os.path.basename(folder), files[j])] = image_dict[sel - 1]
+                    if j == len(files) - 1:
+                        save_images()
+                    self.child_root.quit()
 
-
-if __name__ == '__main__':
-    sk_segment()
+                self.image_selection(self.child_root, self.n_cluster, select_mask, self.pop_up(fig, self.child_root),
+                                     start=1, end=1)
