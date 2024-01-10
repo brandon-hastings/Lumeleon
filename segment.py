@@ -14,12 +14,22 @@ import cv2
 import tkinter as tk
 
 import utils
-
+import utils.directory_utils
+import utils.yaml_utils
 
 """Process for grabCut based segmentation with or without kmeans preprocessing"""
 
+# TODO: machine_labeled will default to false unitl yolov5 labeling is properly tested
 
-def grabcut_segmentation(bounding_box_coord_file, apply_kmeans=False):
+
+def grabcut_segmentation(config_file, machine_labeled=False, apply_kmeans=False):
+    config = utils.yaml_utils.read_config(config_file)
+    # TODO: Figure out file placement for machine learning vs hand labelled bounding boxes
+    if machine_labeled is False:
+        bounding_box_coord_file = os.path.join(config["project_path"], "bounding_boxes", "labeled_images.csv")
+    elif machine_labeled is True:
+        # TODO: csv structure is different for yolov5 outputs. Will need to handle data manipulation
+        bounding_box_coord_file = os.path.join(config["project_path"], "bounding_boxes", )
     if apply_kmeans is not bool:
         raise TypeError(
             f"argument apply_kmeans must be true or false, not {apply_kmeans}"
@@ -38,10 +48,10 @@ def grabcut_segmentation(bounding_box_coord_file, apply_kmeans=False):
 
     for i in range(len(image_paths)):
         # path in csv is from original_images, replace to use intensity_matched images
-        load_file = utils.replace_path(image_paths[i], 'original_images', 'intensity_matched')
+        load_file = utils.directory_utils.replace_path(image_paths[i], 'original_images', 'intensity_matched')
 
         # path in csv is from original_images, replace to use background_segmented for saving images
-        save_file = utils.replace_path(image_paths[i], 'original_images', 'background_segmented')
+        save_file = utils.directory_utils.replace_path(image_paths[i], 'original_images', 'background_segmented')
 
         # load image
         image = cv2.imread(str(load_file))
@@ -143,7 +153,7 @@ class Segmentation:
         #     print("n_cluster setting error")
         # self.child_root = tk.Toplevel(toplevel)
 
-        self.config = utils.read_config(config)
+        self.config = utils.yaml_utils.read_config(config)
         # self.image_directories = self.config["image_folders"]
         #
         # self.file_list = None
@@ -197,7 +207,7 @@ class Segmentation:
         canvas[2].get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
     def background_segmentation(self):
-        folders_to_process, save_folder = utils.search_existing_directories(self.config, self.config["image_folders"],
+        folders_to_process, save_folder = utils.directory_utils.search_existing_directories(self.config,
                                                                             "background_segmented", "intensity_matched")
 
         for folder in folders_to_process:
@@ -258,7 +268,7 @@ class Segmentation:
         image clustering to user than sklearn'''
 
     def manual_pattern_segmentation(self):
-        folders_to_process, save_folder = utils.search_existing_directories(self.config, self.config["image_folders"],
+        folders_to_process, save_folder = utils.directory_utils.search_existing_directories(self.config,
                                                                             "manually_segmented", "intensity_matched")
 
         # dictionary to collect chosen segmented images. Saved in one process at end of function
